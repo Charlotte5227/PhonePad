@@ -35,15 +35,52 @@
   dragBtn.onclick = () => { prefs.scrDragCursor = !prefs.scrDragCursor; savePrefs(); paintButtons(); };
   paintButtons();
 
-  // 文字入力
+  // ---- 文字入力 ----
+  // 下に入力パネルを出す。画面はパネルの上に収まり、最後にタップした場所を拡大して見やすくする
   const input = document.getElementById("scrInput");
-  attachTyper(input, (f) => { if (!f) input.hidden = true; document.getElementById("scrKb").classList.toggle("on", f); });
-  document.getElementById("scrKb").addEventListener("pointerdown", (e) => e.preventDefault());
-  document.getElementById("scrKb").onclick = () => {
-    if (!input.hidden) { input.blur(); input.hidden = true; return; }
-    input.hidden = false;
+  const panel = document.getElementById("scrPanel");
+  const echoEl = document.getElementById("scrEcho");
+  const view = document.getElementById("scrView");
+  let echo = "";
+  function showEcho() {
+    echoEl.textContent = "";
+    const t = document.createElement("span");
+    t.textContent = "送った文字: ";
+    const b = document.createElement("b");
+    b.textContent = echo.slice(-40).replace(/\n/g, "⏎") || "（まだありません）";
+    echoEl.append(t, b);
+  }
+  function onSent(t) {
+    if (t === null) echo = echo.slice(0, -1);
+    else echo += t;
+    showEcho();
+  }
+  attachTyper(input, null, onSent);
+  const keys = document.getElementById("scrKeys");
+  keys.append(
+    keyButton("Esc", () => { sendKey("ESC"); }), keyButton("Tab", () => sendKey("TAB")),
+    modButton("Ctrl", CTRL), modButton("Shift", SHIFT), modButton("Alt", ALT), modButton("Win", WIN),
+    keyButton("←", () => sendKey("LEFT"), true), keyButton("↑", () => sendKey("UP"), true),
+    keyButton("↓", () => sendKey("DOWN"), true), keyButton("→", () => sendKey("RIGHT"), true),
+    keyButton("⌫", () => { sendKey("BACK"); onSent(null); }, true), keyButton("Del", () => sendKey("DEL"), true),
+    keyButton("⏎", () => { sendKey("ENTER"); onSent("\n"); }),
+  );
+  function openPanel() {
+    panel.hidden = false;
+    view.classList.add("typingScr");
+    showEcho();
     input.focus();
-  };
+    setTimeout(() => { resize(); focusLast(); }, 350);
+  }
+  function closePanel() {
+    input.blur();
+    panel.hidden = true;
+    view.classList.remove("typingScr");
+    setTimeout(() => { resize(); restoreZoom(); }, 50);
+  }
+  document.getElementById("scrKb").addEventListener("pointerdown", (e) => e.preventDefault());
+  document.getElementById("scrKb").onclick = () => (panel.hidden ? openPanel() : closePanel());
+  document.getElementById("scrKbClose").onclick = closePanel;
 
   // ---- 画像の取得 ----
   // 画像は操作とは別の通信路で受け取る。届いたらすぐ次を頼み (撮影と表示を重ねる)、
@@ -129,6 +166,7 @@
     return [Math.round(u * 65535), Math.round(v * 65535)];
   }
   function sendMove(x, y) { const p = toPc(x, y); if (!p) return false; Link.send("MA " + p[0] + " " + p[1]); return true; }
+  function noteTap(x, y) { const p = toPc(x, y); if (p) { lastU = p[0] / 65535; lastV = p[1] / 65535; } }
 
   function resize() {
     const r = cv.getBoundingClientRect();
@@ -139,11 +177,30 @@
     draw();
   }
   window.addEventListener("resize", () => { if (active) setTimeout(resize, 50); });
+  window.addEventListener("pp-resize", () => { if (active) { resize(); if (!panel.hidden) focusLast(); } });
+
+  // 最後にタップした場所 (PC画面上の割合)。文字入力のときはそこを拡大する
+  let lastU = -1, lastV = -1, saved = null;
+  function focusLast() {
+    if (!img || lastU < 0 || !prefs.scrAutoZoom) return;
+    if (!saved) saved = { zoom, panX, panY };
+    zoom = Math.max(zoom, 2.2);
+    const s = base() * zoom;
+    panX = iw * s * (0.5 - lastU);
+    panY = ih * s * (0.5 - lastV);
+    draw();
+  }
+  function restoreZoom() {
+    if (!saved) return;
+    ({ zoom, panX, panY } = saved);
+    saved = null;
+    draw();
+  }
   Views.on("scrView", (on) => {
     active = on;
     Link.needMedia("screen", on);
     if (on) { setTimeout(resize, 30); stat.textContent = ""; fpsT = performance.now(); frames = 0; waiting = false; request(); }
-    else { clearTimeout(reqTimer); input.hidden = true; input.blur(); }
+    else { clearTimeout(reqTimer); if (!panel.hidden) closePanel(); }
   });
 
   // ---- タッチ ----
@@ -241,7 +298,7 @@
       if (control() && twoMode === 0 && quick && sendMove(startMid.x, startMid.y)) Link.send(maxPts >= 3 ? "MC M" : "MC R");
     } else if (dragging) { sendMove(lastX, lastY); Link.send("MB L 0"); }
     else if (control() && longPressed) { if (sendMove(downX, downY)) Link.send("MC R"); }
-    else if (control() && !moved) { if (sendMove(downX, downY)) Link.send("MC L"); }
+    else if (control() && !moved) { if (sendMove(downX, downY)) { Link.send("MC L"); noteTap(downX, downY); } }
     else if (!control() && !moved) {
       // 操作OFFのときは、ダブルタップで拡大／元に戻す
       const now = e.timeStamp;

@@ -81,12 +81,20 @@
   .edit button { min-height: 38px; font-size: 13px; background: rgba(51,45,39,.95); }
   .edit button.on, .scrbar button.on, .edit button:active, .scrbar button:active { background: var(--accent); color: var(--accent-ink); }
   #scrView { padding: 0; background: #000; }
+  .scrArea { position: relative; flex: 1; min-height: 0; }
   #scrCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .scrPanel { background: var(--surface); border-radius: 16px 16px 0 0; padding: 8px calc(var(--sr) + 8px) calc(var(--sb) + 8px) calc(var(--sl) + 8px); }
+  .scrPanel .echo { font-size: 13px; color: var(--sub); padding: 0 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scrPanel .echo b { color: var(--ink); font-weight: 400; }
+  .keyrow { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; margin-bottom: 6px; }
+  .keyrow::-webkit-scrollbar { display: none; }
+  .keyrow button { flex: none; min-width: 46px; min-height: 40px; font-size: 14px; padding: 0 8px; border-radius: 10px; }
+  .scrPanel .inrow button { flex: none; }
+  .typingScr .scrbar { display: none; }
   .scrbar { position: absolute; top: calc(var(--st) + 6px); left: calc(var(--sl) + 6px); right: calc(var(--sr) + 6px); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
   .scrbar::-webkit-scrollbar { display: none; }
   .scrbar button { flex: none; min-height: 36px; font-size: 13px; background: rgba(51,45,39,.88); }
   .scrbar span { flex: none; align-self: center; font-size: 12px; color: var(--sub); text-shadow: 0 0 4px #000; }
-  #scrInput { position: absolute; left: calc(var(--sl) + 8px); right: calc(var(--sr) + 8px); bottom: calc(var(--sb) + 6px); height: 44px; }
 
   /* その他 */
   #moreView { display: block; }
@@ -185,16 +193,25 @@
 
   <!-- PCの画面 -->
   <section class="view" id="scrView" hidden>
-    <canvas id="scrCanvas"></canvas>
-    <div class="scrbar">
-      <button id="scrCtrl"></button>
-      <button id="scrQual"></button>
-      <button id="scrDrag"></button>
-      <button id="scrKb">⌨</button>
-      <span id="scrStat"></span>
+    <div class="scrArea" id="scrArea">
+      <canvas id="scrCanvas"></canvas>
+      <div class="scrbar" id="scrBar">
+        <button id="scrCtrl"></button>
+        <button id="scrQual"></button>
+        <button id="scrDrag"></button>
+        <button id="scrKb">⌨ 文字入力</button>
+        <span id="scrStat"></span>
+      </div>
     </div>
-    <textarea id="scrInput" hidden placeholder="入力した文字はすぐPCへ送られます"
-      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="scrPanel" id="scrPanel" hidden>
+      <div class="echo" id="scrEcho">入力した文字はすぐPCに送られます。先にPCの画面で入力したい欄をタップしてください。</div>
+      <div class="keyrow" id="scrKeys"></div>
+      <div class="inrow">
+        <textarea id="scrInput" rows="1" placeholder="ここをタップして入力"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="enter"></textarea>
+        <button id="scrKbClose">閉じる</button>
+      </div>
+    </div>
   </section>
 
   <!-- その他 -->

@@ -120,6 +120,11 @@ object Prefs {
         get() = b("screenControl", true)
         set(v) = sp.edit().putBoolean("screenControl", v).apply()
 
+    /** PC画面表示で文字を入力するとき、最後にタップした場所を拡大する */
+    var screenAutoZoom: Boolean
+        get() = b("screenAutoZoom", true)
+        set(v) = sp.edit().putBoolean("screenAutoZoom", v).apply()
+
     /** PC画面表示で1本指でなぞったとき: true=マウスカーソルを動かす / false=スクロール */
     var screenDragCursor: Boolean
         get() = b("screenDragCursor", false)

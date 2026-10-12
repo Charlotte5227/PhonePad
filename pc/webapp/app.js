@@ -48,7 +48,7 @@ const prefs = Object.assign({
   mouseSpeed: 1.5, mouseAccel: 0.6, scrollSpeed: 1.0, invertTwoFinger: false,
   turboRate: 15, positional: false, floatingSticks: true, fieldAlways: false,
   scrControl: true, scrQuality: 1, scrDragCursor: false, mutePc: false,
-  keyRepeatRate: 16, keyRepeatDelay: 400,
+  keyRepeatRate: 16, keyRepeatDelay: 400, scrAutoZoom: true,
 }, load("prefs", {}));
 function savePrefs() { store("prefs", prefs); }
 
@@ -273,6 +273,21 @@ const Views = {
 };
 document.querySelectorAll("#tabs button").forEach((b) => { b.onclick = () => Views.show(b.dataset.v); });
 
+// ---------------------------------------------------------------- キーボードが出たとき
+// iPhone では、キーボードが出ても画面の大きさが変わらず下が隠れるので、見えている範囲に合わせる
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fit = () => {
+    const shrunk = vv.height < window.innerHeight - 60;
+    document.body.style.height = shrunk ? vv.height + "px" : "";
+    document.body.style.bottom = shrunk ? "auto" : "";
+    document.body.style.transform = shrunk && vv.offsetTop ? "translateY(" + vv.offsetTop + "px)" : "";
+    window.dispatchEvent(new Event("pp-resize"));
+  };
+  vv.addEventListener("resize", fit);
+  vv.addEventListener("scroll", fit);
+}
+
 // ---------------------------------------------------------------- 修飾キー (Ctrl など)
 
 const CTRL = 1, SHIFT = 2, ALT = 4, WIN = 8;
@@ -289,9 +304,11 @@ const Mods = {
   consume() { const m = this.mask; if (this.oneShot) { this.oneShot = 0; this.paint(); } return m; },
   hasCommand() { return (this.mask & (CTRL | ALT | WIN)) !== 0; },
   paint() {
-    for (const [bit, b] of Object.entries(this.buttons)) {
-      b.classList.toggle("on", (this.mask & bit) !== 0);
-      b.classList.toggle("lock", (this.locked & bit) !== 0);
+    for (const [bit, list] of Object.entries(this.buttons)) {
+      for (const b of list) {
+        b.classList.toggle("on", (this.mask & bit) !== 0);
+        b.classList.toggle("lock", (this.locked & bit) !== 0);
+      }
     }
   },
 };
@@ -319,7 +336,7 @@ function sendText(s) {
 // 変換中 (日本語入力の下線が出ている間) は何もしない。
 const SENTINEL = "​​";
 
-function attachTyper(ta, onFocusChange) {
+function attachTyper(ta, onFocusChange, onSent) {
   let composing = false;
   const reset = () => { ta.value = SENTINEL; try { ta.setSelectionRange(SENTINEL.length, SENTINEL.length); } catch (e) {} };
   const sync = () => {
@@ -328,13 +345,14 @@ function attachTyper(ta, onFocusChange) {
     if (v === SENTINEL) return;
     if (v.startsWith(SENTINEL)) {
       sendText(v.slice(SENTINEL.length));
+      onSent && onSent(v.slice(SENTINEL.length));
     } else if (v.length < SENTINEL.length && SENTINEL.startsWith(v)) {
-      for (let i = 0; i < SENTINEL.length - v.length; i++) Link.send("KY BACK " + Mods.consume());
+      for (let i = 0; i < SENTINEL.length - v.length; i++) { Link.send("KY BACK " + Mods.consume()); onSent && onSent(null); }
       if (echoHook) echoHook();
     } else {
       // 目印ごと置き換えられた (全選択して入力など)
       const t = v.replace(/​/g, "");
-      if (t) sendText(t);
+      if (t) { sendText(t); onSent && onSent(t); }
     }
     reset();
   };
@@ -379,7 +397,7 @@ function keyButton(label, onTap, repeat) {
 }
 function modButton(label, bit) {
   const b = keyButton(label, () => Mods.tap(bit));
-  Mods.buttons[bit] = b;
+  (Mods.buttons[bit] = Mods.buttons[bit] || []).push(b);
   return b;
 }
 const k1 = $("keys1"), k2 = $("keys2"), fnBox = $("fnKeys");
@@ -806,6 +824,7 @@ Views.on("moreView", (on) => {
   slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
   check("invertTwoFinger", "2本指スクロールの向きを逆にする");
   check("fieldAlways", "PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ）");
+  check("scrAutoZoom", "PCの画面で文字を入力するとき、最後にタップした場所を拡大する");
   slider("turboRate", "連打の速さ（回/秒）", 5, 30, 1);
   check("positional", "ABXYをSwitchの位置どおりに割り当てる（オフ: 文字どおり A→A）", () => window.Pad && Pad.prefsChanged());
   check("floatingSticks", "コントローラーのスティックを触れた位置に出す", () => window.Pad && Pad.prefsChanged());
@@ -893,7 +912,8 @@ const COACH = {
     "「操作: ON」のとき: タップ=クリック、長押し=右クリック、長押ししてから動かす=ドラッグ。",
     "1本指でなぞる=スクロール（「☐ なぞってカーソル移動」にチェックでカーソル移動）。2本指でなぞる=スクロール。",
     "2本指で広げる・つまむ=拡大・縮小。2本指タップ=右クリック、3本指タップ=中クリック。",
-    "⌨=文字を入力。「← 戻る」でキーボード画面へ。反応が遅いときは「画質」を下げてください。",
+    "「⌨ 文字入力」で下に入力欄とキーが出ます。先にPCの画面で入力したい欄をタップしておくと、その場所が拡大されて見やすくなります。",
+    "「← 戻る」でキーボード画面へ。反応が遅いときは「画質」を下げてください。",
   ]],
 };
 function showCoach(id) {

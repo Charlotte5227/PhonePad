@@ -33,6 +33,12 @@ class ScreenActivity : Activity() {
     private lateinit var kbBtn: KeyButton
     private lateinit var dragBtn: KeyButton
     private lateinit var input: KeyInputView
+    private lateinit var panel: LinearLayout
+    private lateinit var echoView: TextView
+    private lateinit var barScroll: View
+    private val echo = StringBuilder()
+    private var mods: Modifiers? = null
+    private val modButtons = HashMap<Int, KeyButton>()
     private var imeShown = false
 
     @Volatile
@@ -47,8 +53,12 @@ class ScreenActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val root = FrameLayout(this).apply { setBackgroundColor(0xFF000000.toInt()) }
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val screenFrame = FrameLayout(this)
+        column.addView(screenFrame, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(column, FrameLayout.LayoutParams(-1, -1))
         screen = ScreenView(this)
-        root.addView(screen, FrameLayout.LayoutParams(-1, -1))
+        screenFrame.addView(screen, FrameLayout.LayoutParams(-1, -1))
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -98,23 +108,79 @@ class ScreenActivity : Activity() {
         }
         bar.addView(dragBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
 
-        // 文字入力: 画面の下に入力欄を出し、確定した文字をすぐPCへ送る
+        // 文字入力: 下に入力パネル (送った文字・よく使うキー・入力欄) を出す。画面はその上に収める
+        panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(C.SURFACE, dp(16f))
+            setPadding(dpi(8), dpi(8), dpi(8), dpi(8))
+            visibility = View.GONE
+        }
+        echoView = label(this, "", 13f, C.SUB).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.START
+            setPadding(dpi(4), 0, dpi(4), dpi(6))
+        }
+        panel.addView(echoView)
+        val mods = Modifiers { paintMods() }
+        val keys = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun key(lab: String, repeat: Boolean = false, act: () -> Unit) {
+            keys.addView(KeyButton(this, lab, 14f).apply {
+                this.repeat = repeat
+                onTap = act
+                setPadding(dpi(10), 0, dpi(10), 0)
+            }, LinearLayout.LayoutParams(-2, dpi(42)).apply { rightMargin = dpi(5) })
+        }
+        fun send(k: String) = Link.send("KY $k ${mods.consume()}")
+        key("Esc") { send("ESC") }
+        key("Tab") { send("TAB") }
+        for ((lab, bit) in listOf("Ctrl" to Modifiers.CTRL, "Shift" to Modifiers.SHIFT, "Alt" to Modifiers.ALT, "Win" to Modifiers.WIN)) {
+            val b = KeyButton(this, lab, 14f).apply {
+                onTap = { mods.tap(bit) }
+                setPadding(dpi(10), 0, dpi(10), 0)
+            }
+            modButtons[bit] = b
+            keys.addView(b, LinearLayout.LayoutParams(-2, dpi(42)).apply { rightMargin = dpi(5) })
+        }
+        this.mods = mods
+        key("←", true) { send("LEFT") }
+        key("↑", true) { send("UP") }
+        key("↓", true) { send("DOWN") }
+        key("→", true) { send("RIGHT") }
+        key("⌫", true) { send("BACK"); onEcho(null) }
+        key("Del", true) { send("DEL") }
+        key("⏎") { send("ENTER"); onEcho("\n") }
+        panel.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(keys)
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(6) })
+        val inRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         input = KeyInputView(this).apply {
             applyMode(Prefs.latinOnly)
-            sender = ImeSender(Modifiers {}) {}
-            hint = "入力した文字はすぐPCへ送られます"
+            sender = ImeSender(mods) { onEcho(it) }
+            hint = "ここに打った文字はすぐPCへ送られます"
             setHintTextColor(C.SUB)
             setTextColor(C.INK)
             textSize = 16f
             background = rounded(C.BG, dp(10f), C.LINE, dpi(1))
             setPadding(dpi(12), dpi(10), dpi(12), dpi(10))
-            visibility = View.GONE
         }
-        kbBtn = KeyButton(this, "⌨", 15f).apply {
+        inRow.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        inRow.addView(KeyButton(this, "閉じる", 14f).apply {
+            setPadding(dpi(12), 0, dpi(12), 0)
+            onTap = { hideIme() }
+        }, LinearLayout.LayoutParams(-2, dpi(46)).apply { leftMargin = dpi(6) })
+        panel.addView(inRow)
+        showEcho()
+
+        kbBtn = KeyButton(this, "⌨ 文字入力", 13f).apply {
             alpha = 0.85f
-            onTap = { if (imeShown) hideIme() else showIme() }
+            setPadding(dpi(12), 0, dpi(12), 0)
+            onTap = { if (panel.visibility == View.VISIBLE) hideIme() else showIme() }
         }
-        bar.addView(kbBtn, LinearLayout.LayoutParams(dpi(44), dpi(38)).apply { leftMargin = dpi(6) })
+        bar.addView(kbBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
         status = label(this, "", 12f, C.SUB).apply {
             setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
             setPadding(dpi(10), 0, 0, 0)
@@ -125,10 +191,9 @@ class ScreenActivity : Activity() {
             isHorizontalScrollBarEnabled = false
             addView(bar)
         }
-        root.addView(barScroll, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
-        root.addView(input, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
-            setMargins(dpi(8), 0, dpi(8), dpi(6))
-        })
+        screenFrame.addView(barScroll, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+        this.barScroll = barScroll
+        column.addView(panel, LinearLayout.LayoutParams(-1, -2))
 
         root.setOnApplyWindowInsetsListener { v, ins ->
             // キーボードが出ているときは、その上に画面を収める
@@ -140,9 +205,11 @@ class ScreenActivity : Activity() {
             if (shown != imeShown) {
                 imeShown = shown
                 kbBtn.active = if (shown) 1 else 0
-                if (!shown) {
-                    input.clearFocus()
-                    input.visibility = View.GONE
+                if (shown) {
+                    // 画面がパネルの上に縮んでから、最後にタップした場所を拡大する
+                    if (Prefs.screenAutoZoom) screen.postDelayed({ screen.focusLast() }, 120)
+                } else {
+                    closePanel()
                 }
             }
             WindowInsets.CONSUMED
@@ -165,8 +232,40 @@ class ScreenActivity : Activity() {
         dragBtn.visibility = if (Prefs.screenControl) View.VISIBLE else View.GONE
     }
 
+    private fun closePanel() {
+        input.clearFocus()
+        panel.visibility = View.GONE
+        barScroll.visibility = View.VISIBLE
+        screen.post { screen.restoreZoom() }
+    }
+
+    private fun onEcho(t: String?) {
+        if (t == null) {
+            if (echo.isNotEmpty()) echo.setLength(echo.length - 1)
+        } else {
+            echo.append(t)
+        }
+        if (echo.length > 200) echo.delete(0, echo.length - 200)
+        showEcho()
+    }
+
+    private fun showEcho() {
+        val t = echo.toString().replace("\n", "⏎")
+        echoView.text = if (t.isEmpty()) {
+            "先にPCの画面で入力したい欄をタップしてから打ってください"
+        } else {
+            "送った文字: $t"
+        }
+    }
+
+    private fun paintMods() {
+        val m = mods ?: return
+        for ((bit, b) in modButtons) b.active = m.state(bit)
+    }
+
     private fun showIme() {
-        input.visibility = View.VISIBLE
+        panel.visibility = View.VISIBLE
+        barScroll.visibility = View.GONE
         input.requestFocus()
         input.post {
             getSystemService(android.view.inputmethod.InputMethodManager::class.java)
@@ -177,8 +276,7 @@ class ScreenActivity : Activity() {
     private fun hideIme() {
         getSystemService(android.view.inputmethod.InputMethodManager::class.java)
             ?.hideSoftInputFromWindow(input.windowToken, 0)
-        input.clearFocus()
-        input.visibility = View.GONE
+        closePanel()
     }
 
     private fun hideBars() {
@@ -543,6 +641,7 @@ class ScreenView(ctx: Context) : View(ctx) {
                         if (sendMove(downX, downY)) {
                             Link.send("MC L")
                             Haptics.tick()
+                            noteTap(downX, downY)
                         }
                     }
 
@@ -582,6 +681,36 @@ class ScreenView(ctx: Context) : View(ctx) {
     /** 拡大を元に戻す */
     fun resetZoom() {
         zoom = 1f; panX = 0f; panY = 0f
+        invalidate()
+    }
+
+    // ---- 文字入力のときの拡大 ----
+    // 最後にタップした場所 (PC画面上の割合)。入力欄をタップしてから文字を打つことが多いので、そこを拡大する
+    private var lastU = -1f
+    private var lastV = -1f
+    private var saved: FloatArray? = null
+
+    private fun noteTap(x: Float, y: Float) {
+        val p = toPc(x, y) ?: return
+        lastU = p.first / 65535f
+        lastV = p.second / 65535f
+    }
+
+    fun focusLast() {
+        val b = bmp ?: return
+        if (lastU < 0f || width == 0) return
+        if (saved == null) saved = floatArrayOf(zoom, panX, panY)
+        zoom = maxOf(zoom, 2.2f)
+        val s = baseScale(b) * zoom
+        panX = b.width * s * (0.5f - lastU)
+        panY = b.height * s * (0.5f - lastV)
+        invalidate()
+    }
+
+    fun restoreZoom() {
+        val v = saved ?: return
+        zoom = v[0]; panX = v[1]; panY = v[2]
+        saved = null
         invalidate()
     }
 }

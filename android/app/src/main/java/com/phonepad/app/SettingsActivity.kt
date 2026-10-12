@@ -99,6 +99,7 @@ class SettingsActivity : Activity() {
         slider("画質（0=低・速い / 1=標準 / 2=高）", 0f, 2f, Prefs.screenQuality.toFloat(), 0) {
             Prefs.screenQuality = it.roundToInt()
         }
+        toggle("文字を入力するとき、最後にタップした場所を拡大する", Prefs.screenAutoZoom) { Prefs.screenAutoZoom = it }
 
         section("PC")
         val auto = toggle("PCの起動時に PhonePad を自動で起動する（PCとつながっているときに変更できます）", false) {
