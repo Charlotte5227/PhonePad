@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhonePad の使い方</title>
+<meta name="description" content="PhonePad の画面ごとの使い方、指の動かし方、困ったときの対処。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1815; --surface: #26221E; --line: #3A332C; --ink: #F1EBE4; --sub: #A99D91;
+    --amber: #E0A35A; --amber-ink: #2A1A08;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 16px/1.8 "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif; }
+  a { color: var(--amber); }
+  a:focus-visible, summary:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  header { padding: 40px 0 28px; }
+  .back { font-size: 14px; }
+  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.15; font-weight: 800; margin: 10px 0 12px; }
+  .lead { color: var(--sub); max-width: 40em; margin: 0; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  nav.toc a { text-decoration: none; color: var(--ink); border: 2px solid var(--line); border-radius: 99px; padding: 4px 14px; font-size: 14px; }
+  nav.toc a:hover { border-color: var(--amber); }
+
+  section { padding: 40px 0; border-top: 2px solid var(--line); }
+  h2 { font-size: 27px; font-weight: 800; margin: 0 0 6px; }
+  h3 { font-size: 19px; margin: 28px 0 10px; }
+  .sub { color: var(--sub); margin: 0 0 20px; max-width: 44em; }
+  .pair { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 36px; align-items: start; }
+  .pair.wide { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 22px; border: 2px solid var(--line); }
+  figcaption { color: var(--sub); font-size: 13px; margin-top: 6px; }
+
+  /* 指の動き (動く図) */
+  .moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin: 6px 0 4px; }
+  .move { background: var(--surface); border-radius: 18px; padding: 12px; }
+  .move svg { width: 100%; height: auto; display: block; }
+  .move b { display: block; font-size: 15px; margin-top: 6px; }
+  .move span { color: var(--sub); font-size: 13px; line-height: 1.5; display: block; }
+  .pad-bg { fill: #332D27; }
+  .f { fill: rgba(224,163,90,.85); }
+  .ring { fill: none; stroke: var(--amber); stroke-width: 3; opacity: 0; }
+  @keyframes tap { 0%, 30%, 100% { r: 9; opacity: .2 } 12% { r: 13; opacity: 1 } }
+  @keyframes slideX { 0%, 15% { transform: translateX(-34px) } 70%, 100% { transform: translateX(34px) } }
+  @keyframes slideY { 0%, 15% { transform: translateY(18px) } 70%, 100% { transform: translateY(-18px) } }
+  @keyframes spreadL { 0%, 15% { transform: translate(8px, 6px) } 70%, 100% { transform: translate(-22px, -14px) } }
+  @keyframes spreadR { 0%, 15% { transform: translate(-8px, -6px) } 70%, 100% { transform: translate(22px, 14px) } }
+  @keyframes hold { 0%, 10% { opacity: 0; r: 10 } 35% { opacity: 1; r: 18 } 100% { opacity: 1; r: 18 } }
+  @keyframes holdMove { 0%, 40% { transform: translateX(-30px) } 85%, 100% { transform: translateX(30px) } }
+  .a-tap { animation: tap 1.6s ease-out infinite; }
+  .a-x { animation: slideX 1.8s ease-in-out infinite; }
+  .a-y { animation: slideY 1.8s ease-in-out infinite; }
+  .a-sl { animation: spreadL 1.8s ease-in-out infinite; }
+  .a-sr { animation: spreadR 1.8s ease-in-out infinite; }
+  .a-hold { animation: hold 2.4s ease-out infinite; }
+  .a-hm { animation: holdMove 2.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .a-tap, .a-x, .a-y, .a-sl, .a-sr, .a-hold, .a-hm { animation: none; } .ring { opacity: 1; } }
+
+  ol.steps { margin: 0; padding-left: 1.3em; max-width: 46em; }
+  ol.steps li { margin: 0 0 8px; }
+  dl.keys { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  dl.keys dt { font-weight: 700; color: var(--amber); }
+  dl.keys dd { margin: 0; }
+  .callout { border-left: 4px solid var(--amber); padding: 4px 0 4px 16px; margin: 18px 0; max-width: 46em; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--sub); font-weight: 400; font-size: 13px; }
+  .scrollx { overflow-x: auto; }
+  details { border-bottom: 1px solid var(--line); padding: 10px 0; max-width: 52em; }
+  summary { cursor: pointer; font-weight: 700; }
+  details p, details ul { color: var(--ink); margin: 8px 0 4px; }
+  footer { padding: 32px 0 48px; color: var(--sub); font-size: 14px; border-top: 2px solid var(--line); }
+
+  @media (max-width: 760px) {
+    .pair, .pair.wide { grid-template-columns: 1fr; gap: 20px; }
+    .pair figure { max-width: 320px; }
+    .pair.wide figure { max-width: none; }
+    dl.keys { grid-template-columns: 1fr; gap: 0; }
+    dl.keys dd { margin: 0 0 10px; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <a class="back" href="./">← PhonePad のトップへ</a>
+    <h1>PhonePad の使い方</h1>
+    <p class="lead">画面ごとの使い方と、指の動かし方をまとめました。写真はブラウザ版（iPhone）のものです。Android のアプリ版も、操作の方法は同じです（ボタンの置き場所の違いは<a href="#app-web">こちら</a>）。</p>
+    <nav class="toc" aria-label="目次">
+      <a href="#start">はじめに</a><a href="#kb">キーボードとマウス</a><a href="#pad">コントローラー</a>
+      <a href="#screen">PCの画面</a><a href="#more">★・音・電源</a><a href="#app-web">アプリ版とブラウザ版</a><a href="#faq">困ったとき</a>
+    </nav>
+  </header>
+
+  <section id="start" aria-labelledby="h-start">
+    <h2 id="h-start">はじめに</h2>
+    <p class="sub">スマホとPCを同じWi-Fiにつないでおきます。</p>
+    <ol class="steps">
+      <li>PCで PhonePad.exe を起動すると、ブラウザに接続用の画面が開きます。</li>
+      <li><b>Android</b>: PhonePad アプリを開いて「QRコードで接続」を押し、PCの画面の大きいQRコードを読み取ります。<br>
+        <b>iPhone</b>: カメラで「iPhone・ブラウザで使う」のQRコードを読み取り、黄色い「Safari で開く」を押します。</li>
+      <li>2回目からは、開くだけで自動でつながります。iPhone は Safari の共有ボタン →「ホーム画面に追加」しておくと便利です。</li>
+    </ol>
+  </section>
+
+  <section id="kb" aria-labelledby="h-kb">
+    <h2 id="h-kb">キーボードとマウス</h2>
+    <p class="sub">開いたときの画面です。上が文字入力、下の大きな面がマウス（トラックパッド）です。</p>
+    <div class="pair">
+      <figure><img src="img/kb.webp" width="390" height="844" alt="キーボードとマウスの画面。上に入力欄と特殊キー、下に大きなトラックパッドと左・長押し・右のボタン"><figcaption>キーボードとマウスの画面</figcaption></figure>
+      <div>
+        <h3 style="margin-top:0">文字を打つ</h3>
+        <p>入力欄をタップして打つと、その場でPCに入ります。日本語は変換して確定したときに送られます。打っている間は、PCで入力中の欄の中身が上に出て、触れた位置にPCのカーソルを動かせます。</p>
+        <dl class="keys">
+          <dt>Ctrl・Shift・Alt・Win</dt><dd>1回押す → 次の1キーだけ。2回押す → 押しっぱなし。もう1回で解除。<br>例: Ctrl を押してから c で「コピー」</dd>
+          <dt>Fn</dt><dd>F1〜F12、Home、End、半角/全角 などが出ます</dd>
+          <dt>← ↑ ↓ →・⌫</dt><dd>長押しで連続入力。速さは設定で変えられます</dd>
+        </dl>
+
+        <h3>マウスの指の動き</h3>
+        <div class="moves">
+          <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="12"/><g class="a-x"><circle class="f" cx="60" cy="35" r="10"/></g></svg><b>なぞる</b><span>カーソルが動く</span></div>
+          <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="12"/><circle class="f a-tap" cx="34" cy="35" r="10"/></svg><b>左半分をタップ</b><span>左クリック（右半分なら右クリック）</span></div>
+          <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="12"/><g class="a-y"><circle class="f" cx="48" cy="35" r="9"/><circle class="f" cx="72" cy="35" r="9"/></g></svg><b>2本指でなぞる</b><span>スクロール</span></div>
+          <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="12"/><g class="a-hm"><circle class="ring a-hold" cx="60" cy="35" r="18"/><circle class="f" cx="60" cy="35" r="10"/></g></svg><b>長押ししてから動かす</b><span>ドラッグ（ファイルを動かすなど）</span></div>
+        </div>
+        <p>下の「左」「右」は押している間ボタンを押したままになります。「長押し」を押しながら面をなぞるとスクロール、何もせず離すと中クリックです。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pad" aria-labelledby="h-pad">
+    <h2 id="h-pad">コントローラー</h2>
+    <p class="sub">スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えるので、Steam などのゲームでそのまま使えます（PCに一度だけドライバーのインストールが必要です）。</p>
+    <div class="pair wide">
+      <figure><img src="img/pad.webp" width="844" height="390" alt="コントローラーの画面。左にスティックと十字キー、右にABXYとスティック、上にL・R・ZL・ZR"><figcaption>配置はSwitchのコントローラーに近い形です</figcaption></figure>
+      <div>
+        <dl class="keys">
+          <dt>L・R の丸</dt><dd>スティック。触れた位置に出ます（設定で固定にもできます）</dd>
+          <dt>T</dt><dd>連打。T だけを押す → 「押している間は連打」の ON/OFF<br>ボタンを押しながら T → そのボタンだけ自動で連打（もう一度で解除）</dd>
+          <dt>H</dt><dd>ホーム（Xbox のガイドボタン）</dd>
+          <dt>✎</dt><dd>ボタンの位置・大きさ・形を変える</dd>
+          <dt>⌨ ・ ⚙</dt><dd>キーボードに戻る・設定</dd>
+        </dl>
+      </div>
+    </div>
+    <h3>ボタンの配置を変える</h3>
+    <ol class="steps">
+      <li>✎ を押すと、部品が点線で囲まれます。</li>
+      <li>動かしたい部品に触れて、そのままドラッグで移動します。</li>
+      <li>上の「小さく」「大きく」で大きさ、「形」で 標準・丸・角丸・四角 を切り替えます。</li>
+      <li>「完了」で保存します。アプリ版は「プリセット」で配置に名前を付けて保存・切り替えもできます。</li>
+    </ol>
+  </section>
+
+  <section id="screen" aria-labelledby="h-screen">
+    <h2 id="h-screen">PCの画面</h2>
+    <p class="sub">PCの画面をスマホに映して、そのまま操作できます。上のボタンで操作の ON/OFF、画質、1本指の動きを切り替えます。</p>
+    <figure style="max-width:680px"><img src="img/screen-bar.webp" alt="PCの画面表示の上にあるボタン: 戻る、操作ON、画質、なぞってカーソル移動、キーボード"><figcaption>PCの画面表示の上にあるボタン</figcaption></figure>
+    <div class="moves" style="margin-top:18px">
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><circle class="f a-tap" cx="60" cy="35" r="10"/></svg><b>タップ</b><span>その場所をクリック</span></div>
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><circle class="ring a-hold" cx="60" cy="35" r="18"/><circle class="f" cx="60" cy="35" r="10"/></svg><b>長押し</b><span>右クリック</span></div>
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><g class="a-y"><circle class="f" cx="60" cy="35" r="10"/></g></svg><b>なぞる</b><span>スクロール（☑ でカーソル移動に変更）</span></div>
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><g class="a-y"><circle class="f" cx="48" cy="35" r="9"/><circle class="f" cx="72" cy="35" r="9"/></g></svg><b>2本指でなぞる</b><span>スクロール</span></div>
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><g class="a-sl"><circle class="f" cx="50" cy="38" r="9"/></g><g class="a-sr"><circle class="f" cx="70" cy="32" r="9"/></g></svg><b>2本指で広げる</b><span>拡大（つまむと縮小）</span></div>
+      <div class="move"><svg viewBox="0 0 120 70" aria-hidden="true"><rect class="pad-bg" x="2" y="2" width="116" height="66" rx="8"/><g class="a-hm"><circle class="ring a-hold" cx="60" cy="35" r="18"/><circle class="f" cx="60" cy="35" r="10"/></g></svg><b>長押ししてから動かす</b><span>ドラッグ</span></div>
+    </div>
+    <p>2本指で軽くタップすると右クリック、3本指なら中クリックです。動きが遅いときは「画質」を「低」にすると軽くなります。</p>
+  </section>
+
+  <section id="more" aria-labelledby="h-more">
+    <h2 id="h-more">★ショートカット・音・電源</h2>
+    <div class="pair">
+      <figure><img src="img/star.webp" width="390" height="664" alt="★ショートカットの一覧。コピー、貼り付け、エクスプローラーなどのボタン"><figcaption>★ショートカット</figcaption></figure>
+      <div>
+        <h3 style="margin-top:0">★ショートカット</h3>
+        <p>コピー・貼り付け・Win+E（エクスプローラー）などを1タップで送れます。「追加」で好きなキーの組み合わせや、開きたいアプリ・サイトを登録できます。アプリ版は、PCのアプリの一覧から選んで登録もできます。</p>
+        <h3>音</h3>
+        <p>PCの音量、ミュート、出力先（スピーカー／ヘッドホンなど）を切り替えられます。「🎧 スマホで聞く」で、PCの音をスマホから流せます。「PCのスピーカーから音を出さない」にチェックすると、聞いている間はPCからは鳴らず、スマホだけで鳴ります（止めると元に戻ります）。</p>
+        <h3>クリップボード・電源・PCの状態</h3>
+        <p>スマホとPCで、コピーした文字をやり取りできます。ロック・スリープ・再起動・シャットダウンもここから。CPU・メモリ・電池などの様子も見られます。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="app-web" aria-labelledby="h-appweb">
+    <h2 id="h-appweb">アプリ版とブラウザ版の違い</h2>
+    <p class="sub">操作の方法は同じで、ボタンの置き場所が少し違います。</p>
+    <div class="scrollx"><table>
+      <thead><tr><th>やりたいこと</th><th>Android アプリ版</th><th>ブラウザ版（iPhone）</th></tr></thead>
+      <tbody>
+        <tr><td>コントローラー</td><td>上の 🎮</td><td>下のタブ「コントローラー」</td></tr>
+        <tr><td>★ショートカット</td><td>上の ★</td><td>入力欄の横の ★</td></tr>
+        <tr><td>音量・スマホで聞く</td><td>上の 🔊</td><td>下のタブ「その他」</td></tr>
+        <tr><td>PCの画面</td><td>上の 🖥</td><td>下のタブ「PCの画面」</td></tr>
+        <tr><td>クリップボード・電源</td><td>★ の中</td><td>「その他」</td></tr>
+        <tr><td>PCの状態</td><td>上のPC名を押す</td><td>「その他」</td></tr>
+        <tr><td>設定</td><td>上の ⚙</td><td>「その他」の下のほう</td></tr>
+        <tr><td>振動・PCの電源を入れる・PCの自動探索</td><td>できる</td><td>できない</td></tr>
+      </tbody>
+    </table></div>
+    <p>ブラウザ版でできないこと・劣るところは<a href="./#h-web">トップページ</a>にまとめています。</p>
+  </section>
+
+  <section id="faq" aria-labelledby="h-faq">
+    <h2 id="h-faq">困ったとき</h2>
+    <details><summary>つながらない</summary>
+      <ul>
+        <li>スマホとPCが同じWi-Fi（同じルーター）につながっているか確かめてください。</li>
+        <li>PCの PhonePad を初めて起動したときの「Windows セキュリティの重要な警告」で「プライベート ネットワーク」を許可したか確かめてください。Windows の設定で、使っているWi-Fiを「プライベート」にしてください。</li>
+        <li>PCの画面の「接続コードを変更」を押した後は、QRコードを読み直してください。</li>
+      </ul>
+    </details>
+    <details><summary>iPhone でQRコードを読んだら、関係ないページが開いた</summary>
+      <p>カメラがQRコードではなく周りの文字を読み取ると、検索や翻訳が開くことがあります。QRコードだけが大きく写るように近づけ、画面に出る黄色い「Safari で開く」を押してください。</p>
+    </details>
+    <details><summary>コントローラーがゲームで反応しない</summary>
+      <p>PCの画面で「ドライバーをインストール」を一度だけ実行し、「使用できます」になっているか確かめてください。Windows の「USB ゲーム コントローラーのセットアップ」（joy.cpl）で動きを確認できます。</p>
+    </details>
+    <details><summary>文字の順番がおかしい・英字がうまく入らない</summary>
+      <p>アプリ版の設定「英数字専用キーボードにする」をオンにすると、英字が1文字ずつ確実に送られます（日本語入力は使えなくなります）。</p>
+    </details>
+    <details><summary>「スマホで聞く」の音が遅れる・途切れる・鳴らない</summary>
+      <ul>
+        <li>Wi-Fi の電波が弱いと途切れやすくなります。ルーターの近くで試してください。</li>
+        <li>iPhone はマナーモードだと鳴らないことがあります。ブラウザ版は、ページを開いている間だけ鳴ります。</li>
+        <li>聞き始めは、音がそろうまで少し時間がかかることがあります。</li>
+      </ul>
+    </details>
+    <details><summary>PCの画面表示が遅い</summary>
+      <p>「画質」を「低」にしてください。PCの画面が大きく動いている間（動画など）は特に重くなります。動画やゲームを見るなら Steam Link などの専用のソフトのほうが向いています。</p>
+    </details>
+    <details><summary>更新のしかた</summary>
+      <p>新しいバージョンが出ると、アプリとPCのソフトが「更新しますか？」と知らせてくれます。ブラウザ版は、PCのソフトを更新すれば自動で新しくなります。</p>
+    </details>
+  </section>
+</main>
+<footer class="wrap"><a href="./">PhonePad のトップへ</a> ・ <a href="https://github.com/Charlotte5227/PhonePad/releases">すべてのリリース</a></footer>
+</body>
+</html>

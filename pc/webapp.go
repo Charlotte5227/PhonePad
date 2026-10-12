@@ -21,11 +21,13 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha512"
+	"crypto/subtle"
 	"embed"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"log"
@@ -327,15 +329,29 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 	// 最初のメッセージで鍵が正しいか確かめる
 	_ = ws.c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	kind, first, err := sw.recv()
-	if err != nil || kind != 'L' {
+	if err != nil {
 		if errors.Is(err, errBadBox) {
 			s.addFail(ip)
 			log.Printf("ブラウザ版: 鍵が違うため拒否しました (%s)", ip)
 		}
 		return
 	}
+	switch {
+	case kind == 'L' && r.URL.Query().Get("media") == "":
+		s.webMain(sw, ws, first)
+	case kind == 'M' && r.URL.Query().Get("media") == "1":
+		// 画面・音用の通信路 (操作とは別にして、大きなデータで操作が待たされないようにする)
+		if subtle.ConstantTimeCompare(first, []byte(s.code())) != 1 {
+			s.addFail(ip)
+			_ = sw.send('L', []byte("NG code"))
+			return
+		}
+		s.webMedia(sw, ws)
+	}
+}
 
-	// 中身はアプリと同じ処理に任せる
+// 操作用の通信路: 中身はアプリと同じ処理に任せる
+func (s *server) webMain(sw *secureWS, ws *wsConn, first []byte) {
 	a, b := net.Pipe()
 	defer b.Close()
 	go s.handleConn(addrConn{Conn: a, local: ws.c.LocalAddr(), remote: ws.c.RemoteAddr()})
@@ -343,9 +359,6 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if _, err := b.Write(append(first, '\n')); err != nil {
 		return
 	}
-
-	done := make(chan struct{})
-	defer close(done)
 
 	// PC → ブラウザ (コマンドの返事)
 	go func() {
@@ -359,7 +372,30 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	for {
+		// ブラウザは1秒ごとに PING を送ってくる
+		_ = ws.c.SetReadDeadline(time.Now().Add(15 * time.Second))
+		kind, data, err := sw.recv()
+		if err != nil {
+			return
+		}
+		if kind != 'L' || len(data) > 64*1024 {
+			continue
+		}
+		_ = b.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if _, err := b.Write(append(data, '\n')); err != nil {
+			return
+		}
+	}
+}
+
+// 画面・音用の通信路
+func (s *server) webMedia(sw *secureWS, ws *wsConn) {
+	done := make(chan struct{})
+	defer close(done)
+
 	var screenBusy sync.Mutex
+	var lastFrame uint64
 	var audioStop chan struct{}
 	stopAudio := func() {
 		if audioStop != nil {
@@ -370,22 +406,12 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer stopAudio()
 
 	for {
-		// ブラウザは1秒ごとに PING を送ってくる
-		_ = ws.c.SetReadDeadline(time.Now().Add(15 * time.Second))
+		_ = ws.c.SetReadDeadline(time.Now().Add(60 * time.Second))
 		kind, data, err := sw.recv()
 		if err != nil {
 			return
 		}
 		switch kind {
-		case 'L':
-			if len(data) > 64*1024 {
-				return
-			}
-			_ = b.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if _, err := b.Write(append(data, '\n')); err != nil {
-				return
-			}
-
 		case 'S': // 画面 (前のが終わるまで次は撮らない)
 			if !screenBusy.TryLock() {
 				continue
@@ -398,14 +424,26 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 				jpg, err := screenJPEG(width, q)
 				if err != nil {
 					_ = sw.send('L', []byte("ER "+base64.StdEncoding.EncodeToString([]byte("画面を取得できません: "+err.Error()))))
+					_ = sw.send('S', nil)
 					return
 				}
+				// 前と同じ画面なら送らない (通信を減らして反応を速くする)
+				h := fnv.New64a()
+				h.Write(jpg)
+				sum := h.Sum64()
+				if sum == lastFrame {
+					_ = sw.send('S', nil)
+					return
+				}
+				lastFrame = sum
 				_ = sw.send('S', jpg)
 			}()
 
-		case 'A': // PCの音
-			if string(data) == "1" && audioStop == nil {
-				ch, rate, err := hub.subscribe()
+		case 'A': // PCの音: "1"=開始 "1m"=開始してPCのスピーカーは消す "0"=停止
+			cmd := string(data)
+			if strings.HasPrefix(cmd, "1") {
+				stopAudio()
+				ch, rate, err := hub.subscribe(cmd == "1m")
 				if err != nil {
 					_ = sw.send('L', []byte("ER "+base64.StdEncoding.EncodeToString([]byte("PCの音を取り込めません: "+err.Error()))))
 					continue
@@ -415,6 +453,9 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 				_ = sw.send('a', []byte(fmt.Sprint(rate)))
 				go func() {
 					defer hub.unsubscribe(ch)
+					// 細かく送るとブラウザ側の再生が途切れやすいので、約40ミリ秒ずつまとめる
+					minBytes := rate * 4 * 40 / 1000
+					var buf []byte
 					for {
 						select {
 						case <-stop:
@@ -422,13 +463,18 @@ func (s *server) handleWS(w http.ResponseWriter, r *http.Request) {
 						case <-done:
 							return
 						case pcm := <-ch:
-							if err := sw.send('A', pcm); err != nil {
+							buf = append(buf, pcm...)
+							if len(buf) < minBytes {
+								continue
+							}
+							if err := sw.send('A', buf); err != nil {
 								return
 							}
+							buf = nil
 						}
 					}
 				}()
-			} else if string(data) == "0" {
+			} else {
 				stopAudio()
 			}
 		}

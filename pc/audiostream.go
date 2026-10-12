@@ -9,6 +9,8 @@ import (
 	"log"
 	"math"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -23,12 +25,17 @@ type audioHub struct {
 	subs    map[chan []byte]struct{}
 	rate    int
 	stopCap func()
+
+	// 「スマホだけで鳴らす」: 聞いている人がいる間はPCのスピーカーをミュートする
+	// (ループバックの取り込みはミュートの影響を受けない)
+	muters    map[chan []byte]bool
+	savedMute *bool // ミュートする前の状態 (nil = こちらではミュートしていない)
 }
 
 var hub = &audioHub{subs: map[chan []byte]struct{}{}}
 
 // 聞く人が来たら取り込みを始め、いなくなったら止める
-func (h *audioHub) subscribe() (chan []byte, int, error) {
+func (h *audioHub) subscribe(mutePC bool) (chan []byte, int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.stopCap == nil {
@@ -41,6 +48,13 @@ func (h *audioHub) subscribe() (chan []byte, int, error) {
 	}
 	c := make(chan []byte, 12)
 	h.subs[c] = struct{}{}
+	if mutePC {
+		if h.muters == nil {
+			h.muters = map[chan []byte]bool{}
+		}
+		h.muters[c] = true
+	}
+	h.applyMute()
 	return c, h.rate, nil
 }
 
@@ -48,6 +62,8 @@ func (h *audioHub) unsubscribe(c chan []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.subs, c)
+	delete(h.muters, c)
+	h.applyMute()
 	if len(h.subs) == 0 && h.stopCap != nil {
 		h.stopCap()
 		h.stopCap = nil
@@ -103,7 +119,7 @@ func (s *server) handleAudio(c net.Conn) {
 		_, _ = c.Write([]byte("NG\n"))
 		return
 	}
-	ch, rate, err := hub.subscribe()
+	ch, rate, err := hub.subscribe(len(f) >= 3 && f[2] == "m")
 	if err != nil {
 		log.Println("PCの音を取り込めません:", err)
 		_, _ = c.Write([]byte("NG " + err.Error() + "\n"))
@@ -197,4 +213,50 @@ func decimation(rate int) int {
 		d *= 2
 	}
 	return d
+}
+
+// PCのスピーカーのミュートを、聞いている人の希望に合わせる (h.mu を持った状態で呼ぶ)
+func (h *audioHub) applyMute() {
+	want := len(h.muters) > 0
+	if want && h.savedMute == nil {
+		prev := getAudioInfo().Mute
+		h.savedMute = &prev
+		if err := setAudioMute(true); err != nil {
+			log.Println("PCのスピーカーを消せませんでした:", err)
+		}
+		markMutedByUs(!prev)
+		log.Println("スマホだけで鳴らすため、PCのスピーカーをミュートしました")
+	} else if !want && h.savedMute != nil {
+		if err := setAudioMute(*h.savedMute); err != nil {
+			log.Println("PCのスピーカーを戻せませんでした:", err)
+		}
+		h.savedMute = nil
+		markMutedByUs(false)
+		log.Println("PCのスピーカーを元に戻しました")
+	}
+}
+
+// 途中で終了してもミュートのままにならないよう、印を残しておき、次の起動時に戻す
+func mutedMarkPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = "."
+	}
+	return filepath.Join(dir, "PhonePad", "muted-by-phonepad")
+}
+
+func markMutedByUs(on bool) {
+	if on {
+		_ = os.WriteFile(mutedMarkPath(), []byte("1"), 0o600)
+	} else {
+		_ = os.Remove(mutedMarkPath())
+	}
+}
+
+func restoreMuteAfterCrash() {
+	if _, err := os.Stat(mutedMarkPath()); err == nil {
+		_ = setAudioMute(false)
+		_ = os.Remove(mutedMarkPath())
+		log.Println("前回ミュートしたままだったPCのスピーカーを元に戻しました")
+	}
 }

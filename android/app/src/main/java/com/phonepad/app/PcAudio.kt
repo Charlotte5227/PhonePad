@@ -89,7 +89,9 @@ object PcAudio {
         try {
             ssl.soTimeout = 8000
             ssl.startHandshake()
-            ssl.outputStream.write("AUDIO ${t.code}\n".toByteArray())
+            // m を付けると、聞いている間はPCのスピーカーから音を出さない
+            val opt = if (Prefs.pcAudioMutePc) " m" else ""
+            ssl.outputStream.write("AUDIO ${t.code}$opt\n".toByteArray())
             ssl.outputStream.flush()
             val ins = ssl.inputStream
             val head = readLine(ins).split(" ")

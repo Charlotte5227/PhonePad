@@ -83,16 +83,30 @@ func captureScreen(maxW int) (*image.RGBA, error) {
 
 var testAudio = audioInfo{Volume: 40, Devices: []audioDevice{{ID: "{spk}", Name: "スピーカー", Default: true}, {ID: "{hp}", Name: "ヘッドホン"}}}
 
-func getAudioInfo() audioInfo { return testAudio }
+var testAudioMu sync.Mutex
+
+func getAudioInfo() audioInfo {
+	testAudioMu.Lock()
+	defer testAudioMu.Unlock()
+	a := testAudio
+	a.Devices = append([]audioDevice(nil), testAudio.Devices...)
+	return a
+}
 func setAudioVolume(p int) error {
+	testAudioMu.Lock()
+	defer testAudioMu.Unlock()
 	testAudio.Volume = p
 	return nil
 }
 func setAudioMute(m bool) error {
+	testAudioMu.Lock()
+	defer testAudioMu.Unlock()
 	testAudio.Mute = m
 	return nil
 }
 func setAudioDefault(id string) error {
+	testAudioMu.Lock()
+	defer testAudioMu.Unlock()
 	for i := range testAudio.Devices {
 		testAudio.Devices[i].Default = testAudio.Devices[i].ID == id
 	}

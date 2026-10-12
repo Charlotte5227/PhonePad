@@ -107,6 +107,22 @@ class VolumePanel(private val act: Activity) {
         audioBtn.setPadding(act.dpi(14), 0, act.dpi(14), 0)
         audioRow.addView(audioStatus, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(audioRow)
+        @Suppress("UseSwitchCompatOrMaterialCode")
+        root.addView(android.widget.Switch(act).apply {
+            text = "スマホで聞いている間は、PCのスピーカーから音を出さない（オフ: 両方から鳴らす）"
+            textSize = 13f
+            setTextColor(C.INK)
+            isChecked = Prefs.pcAudioMutePc
+            setPadding(0, act.dpi(2), 0, act.dpi(6))
+            setOnCheckedChangeListener { _, on ->
+                Prefs.pcAudioMutePc = on
+                // 聞いている途中なら、つなぎ直して反映する
+                if (Prefs.pcAudio) {
+                    PcAudio.stop()
+                    PcAudio.start()
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, -2))
         PcAudio.onStatus = { refreshAudio() }
         refreshAudio()
 

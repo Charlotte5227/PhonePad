@@ -44,7 +44,8 @@
   ol { margin: 0; padding-left: 1.3em; color: var(--sub); }
   li { margin: 4px 0; }
   .apk { display: grid; grid-template-columns: 180px 1fr; gap: 20px; margin-top: 20px; align-items: center; }
-  @media (max-width: 720px) { .apk { grid-template-columns: 1fr; } }
+  .apk.wide { grid-template-columns: 260px 1fr; }
+  @media (max-width: 720px) { .apk, .apk.wide { grid-template-columns: 1fr; } }
   .url { color: var(--sub); font: 13px ui-monospace, Consolas, monospace; margin: 10px 0 0; word-break: break-all; }
   .check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
   .check input { margin-top: 5px; width: 18px; height: 18px; accent-color: var(--accent); }
@@ -114,12 +115,12 @@
     </section>
   </div>
 
-  <section class="card apk" id="webCard">
+  <section class="card apk wide" id="webCard">
     <div class="qr small" id="webQr"></div>
     <div>
       <h2 style="margin-top:0">iPhone・ブラウザで使う（アプリなし）</h2>
       <ol>
-        <li>iPhone のカメラでこのQRコードを読み取ると、Safari で操作画面が開きます。アプリを入れる必要はありません。</li>
+        <li>iPhone の「カメラ」をこのQRコードに向け、画面に出る黄色い「Safari で開く」（アドレスの表示）を押すと、操作画面が開きます。アプリを入れる必要はありません。<br><small>QRコードだけが大きく写るように近づけてください。周りの文字が写ると、文字の読み取り（翻訳・検索など）が反応することがあります。</small></li>
         <li>Safari の共有ボタン →「ホーム画面に追加」で、次からはアイコンから開けます。</li>
         <li>振動・スマホからPCの電源を入れる機能などは使えません。くわしくは操作画面の「ブラウザ版について」を見てください。Android ではアプリ版がおすすめです。</li>
       </ol>
@@ -151,9 +152,9 @@
   let lastQR = "", lastSite = null, lastDevs = "", lastWeb = null;
   const $ = (id) => document.getElementById(id);
 
-  function drawQR(text, el) {
+  function drawQR(text, el, ecc) {
     qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
-    const q = qrcode(0, "M");
+    const q = qrcode(0, ecc || "M");
     q.addData(text, "Byte");
     q.make();
     $(el).innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
@@ -167,7 +168,8 @@
       if (s.webURL !== lastWeb) {
         lastWeb = s.webURL;
         $("webCard").hidden = !s.webURL;
-        if (s.webURL) drawQR(s.webURL, "webQr");
+        // 長いURLなので、目を粗くして読み取りやすくする
+        if (s.webURL) drawQR(s.webURL, "webQr", "L");
       }
       if (s.siteURL && s.siteURL !== lastSite) {
         lastSite = s.siteURL;

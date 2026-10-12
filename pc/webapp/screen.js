@@ -45,39 +45,54 @@
     input.focus();
   };
 
-  // ---- 画像の取得 (前の画像が届いたら次を頼む) ----
+  // ---- 画像の取得 ----
+  // 画像は操作とは別の通信路で受け取る。届いたらすぐ次を頼み (撮影と表示を重ねる)、
+  // PCの画面が変わっていないときは、PCは空の返事だけを返す
   function request() {
     clearTimeout(reqTimer);
-    if (!active || waiting || !Link.ready) return;
+    if (!active || waiting || !Link.mediaReady) return;
     const wait = 50 - (performance.now() - lastReq); // 最大でも1秒に20コマ
     if (wait > 0) { reqTimer = setTimeout(request, wait); return; }
-    const [w, q] = [[640, 45], [1024, 60], [1440, 75]][prefs.scrQuality];
+    const [w, q] = [[640, 40], [960, 55], [1440, 70]][prefs.scrQuality];
     waiting = true;
     lastReq = performance.now();
-    Link.sendRaw("S", enc.encode(w + " " + q));
+    Link.sendMedia("S", enc.encode(w + " " + q));
     // 返事が来ないときはもう一度
     reqTimer = setTimeout(() => { waiting = false; request(); }, 3000);
   }
-  Link.onData("S", async (bytes) => {
-    const blob = new Blob([bytes], { type: "image/jpeg" });
+  let decoding = false, pending = null;
+  async function show(bytes) {
+    if (decoding) { pending = bytes; return; } // 表示が追いつかないときは最新のものだけ
+    decoding = true;
     try {
+      const blob = new Blob([bytes], { type: "image/jpeg" });
       let bmp;
       if (window.createImageBitmap) bmp = await createImageBitmap(blob);
-      else {
-        bmp = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(blob); });
-      }
+      else bmp = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(blob); });
       if (img && img.close) img.close();
       if (img && img.src && img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
       img = bmp; iw = bmp.width; ih = bmp.height;
       draw();
       frames++;
-      const now = performance.now();
-      if (now - fpsT >= 1000) { stat.textContent = frames + "コマ/秒"; frames = 0; fpsT = now; }
     } catch (e) {}
+    decoding = false;
+    if (pending) { const p = pending; pending = null; show(p); }
+  }
+  Link.onData("S", (bytes) => {
     waiting = false;
-    request();
+    if (bytes.length === 0) {
+      // 変化なし: 少し待ってから次を頼む
+      clearTimeout(reqTimer);
+      reqTimer = setTimeout(request, 80);
+    } else {
+      request();
+      show(bytes.slice());
+    }
+    const now = performance.now();
+    if (now - fpsT >= 1000) { stat.textContent = frames ? frames + "コマ/秒" : "変化なし"; frames = 0; fpsT = now; }
   });
-  Link.onState.push((s) => { if (s === "open" && active) { waiting = false; request(); } if (s !== "open" && active) stat.textContent = "PCに接続していません"; });
+  Link.onMediaReady.push(() => { if (active) { waiting = false; request(); } });
+  Link.onState.push((s) => { if (s !== "open" && active) stat.textContent = "PCに接続していません"; });
 
   // ---- 表示 ----
   function base() { return Math.min(W / iw, H / ih); }
@@ -126,6 +141,7 @@
   window.addEventListener("resize", () => { if (active) setTimeout(resize, 50); });
   Views.on("scrView", (on) => {
     active = on;
+    Link.needMedia("screen", on);
     if (on) { setTimeout(resize, 30); stat.textContent = ""; fpsT = performance.now(); frames = 0; waiting = false; request(); }
     else { clearTimeout(reqTimer); input.hidden = true; input.blur(); }
   });

@@ -60,6 +60,12 @@ class SettingsActivity : Activity() {
         toggle("PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ表示）", Prefs.fieldAlways) {
             Prefs.fieldAlways = it
         }
+        slider("矢印キーなどを長押ししたときの速さ（回/秒）", 4f, 40f, Prefs.keyRepeatRate.toFloat(), 0) {
+            Prefs.keyRepeatRate = it.roundToInt()
+        }
+        slider("長押ししてから連続入力が始まるまで（ミリ秒）", 150f, 800f, Prefs.keyRepeatDelay.toFloat(), 0) {
+            Prefs.keyRepeatDelay = it.roundToInt()
+        }
 
         section("コントローラー")
         slider("連打の速さ（回/秒）", 5f, 30f, Prefs.turboRate.toFloat(), 0) { Prefs.turboRate = it.roundToInt() }
@@ -119,6 +125,13 @@ class SettingsActivity : Activity() {
                 )
             }
         }, LinearLayout.LayoutParams(-1, dpi(52)).apply { topMargin = dpi(28) })
+
+        section("使い方")
+        box.addView(KeyButton(this, "使い方を見る（配布サイトの説明書）", 15f).apply {
+            onTap = {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Updater.SITE + "guide.html")))
+            }
+        }, LinearLayout.LayoutParams(-1, dpi(48)))
 
         section("更新")
         box.addView(KeyButton(this, "新しいバージョンを確認", 15f).apply {

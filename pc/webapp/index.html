@@ -79,6 +79,7 @@
   .rotate b { display: block; color: var(--ink); font-size: 20px; margin-bottom: 6px; }
   .edit { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96%; }
   .edit button { min-height: 38px; font-size: 13px; background: rgba(51,45,39,.95); }
+  .edit button.on, .scrbar button.on, .edit button:active, .scrbar button:active { background: var(--accent); color: var(--accent-ink); }
   #scrView { padding: 0; background: #000; }
   #scrCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .scrbar { position: absolute; top: calc(var(--st) + 6px); left: calc(var(--sl) + 6px); right: calc(var(--sr) + 6px); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
@@ -137,7 +138,7 @@
 
 <div class="top">
   <div class="status" id="status">接続しています…</div>
-  <button id="helpBtn" aria-label="ブラウザ版について">？ ブラウザ版について</button>
+  <button id="helpBtn" aria-label="使い方">？ 使い方</button>
 </div>
 
 <main>
@@ -174,7 +175,8 @@
   <!-- コントローラー -->
   <section class="view" id="padView" hidden>
     <canvas id="padCanvas"></canvas>
-    <div class="rotate" id="rotate" hidden><div><b>スマホを横向きにしてください</b>コントローラーは横向きで使います。<br>（画面の向きのロックを外してください）</div></div>
+    <div class="rotate" id="rotate" hidden><div><b>スマホを横向きにしてください</b>コントローラーは横向きで使います。<br>（画面の向きのロックを外してください）
+      <div class="row" style="margin-top:18px;justify-content:center"><button id="padBack" style="pointer-events:auto;flex:0 1 auto;padding:0 18px">← キーボードに戻る</button></div></div></div>
     <div class="edit" id="editBar" hidden>
       <button id="edSmall">小さく</button><button id="edBig">大きく</button><button id="edShape">形</button>
       <button id="edReset">初期配置</button><button id="edDone" class="on">完了</button>
@@ -201,7 +203,8 @@
     <div class="set"><label><span>PCの音量</span><span id="volVal">-</span></label>
       <input type="range" id="vol" min="0" max="100" value="0"></div>
     <div class="row"><button id="mute">ミュート</button><button id="listen">🎧 スマホで聞く: OFF</button></div>
-    <p class="note" id="listenNote">「スマホで聞く」はこの画面を開いている間だけ鳴ります。</p>
+    <label class="chk"><input type="checkbox" id="mutePc"><span>スマホで聞いている間は、PCのスピーカーから音を出さない（オフ: 両方から鳴らす）</span></label>
+    <p class="note" id="listenNote">「スマホで聞く」はこのページを開いている間だけ鳴ります。iPhone がマナーモードだと鳴らないことがあります。</p>
     <div class="list" id="devs" style="margin-top:8px"></div>
     <p class="note" id="volErr"></p>
 
@@ -225,7 +228,8 @@
 
     <h2>このページについて</h2>
     <p class="note" id="aboutVer"></p>
-    <div class="row" style="margin-top:6px"><button id="helpBtn2">ブラウザ版でできること・できないこと</button></div>
+    <div class="row" style="margin-top:6px"><button id="howKb">キーボード・マウスの使い方</button><button id="howPad">コントローラーの使い方</button><button id="howScr">PCの画面の使い方</button></div>
+    <div class="row" style="margin-top:6px"><button id="helpBtn2">ブラウザ版でできること・できないこと</button><button id="guideLink">くわしい説明（配布サイト）</button></div>
   </section>
 </main>
 
@@ -249,6 +253,13 @@
       <p class="note">削除するときは、上の一覧のボタンを長押ししてください。</p>
     </div>
   </div>
+</div></div>
+
+<div class="sheet" id="coachSheet" hidden><div class="help">
+  <h3 id="coachTitle">この画面の使い方</h3>
+  <ul id="coachList"></ul>
+  <div class="row" style="margin-top:14px"><button id="coachMore">ブラウザ版でできること・できないこと</button><button id="coachOk" class="on">わかった</button></div>
+  <p class="note">いつでも上の「？ 使い方」から見られます（コントローラーと画面表示では、その他 → 使い方）。</p>
 </div></div>
 
 <div class="sheet" id="helpSheet" hidden><div class="help">

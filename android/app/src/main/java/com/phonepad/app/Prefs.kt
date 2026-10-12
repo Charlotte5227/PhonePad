@@ -130,6 +130,19 @@ object Prefs {
         get() = b("pcAudio", false)
         set(v) = sp.edit().putBoolean("pcAudio", v).apply()
 
+    /** スマホで聞いている間は PCのスピーカーから音を出さない */
+    var pcAudioMutePc: Boolean
+        get() = b("pcAudioMutePc", false)
+        set(v) = sp.edit().putBoolean("pcAudioMutePc", v).apply()
+
+    /** 矢印キーなどを長押ししたときの連続入力 (回/秒) と、始まるまでの時間 (ミリ秒) */
+    var keyRepeatRate: Int
+        get() = sp.getInt("keyRepeatRate", 18)
+        set(v) = sp.edit().putInt("keyRepeatRate", v).apply()
+    var keyRepeatDelay: Int
+        get() = sp.getInt("keyRepeatDelay", 380)
+        set(v) = sp.edit().putInt("keyRepeatDelay", v).apply()
+
     /** 配置のプリセット (JSON: {名前: 配置文字列}) */
     var padPresets: String
         get() = s("padPresets", "{}")

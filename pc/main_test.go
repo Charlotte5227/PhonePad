@@ -448,12 +448,16 @@ type testWS struct {
 }
 
 func dialTestWS(t *testing.T, url string, webKey []byte) *testWS {
+	return dialTestWSPath(t, url, "/ws", webKey)
+}
+
+func dialTestWSPath(t *testing.T, url, path string, webKey []byte) *testWS {
 	host := strings.TrimPrefix(url, "http://")
 	c, err := net.Dial("tcp", host)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := "GET /ws HTTP/1.1\r\nHost: " + host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+	req := "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
 		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://" + host + "\r\n\r\n"
 	c.Write([]byte(req))
 	br := bufio.NewReader(c)
@@ -577,17 +581,45 @@ func TestWebApp(t *testing.T) {
 	if n != 1 || name != "iPhone" {
 		t.Fatalf("sessions: %d %q", n, name)
 	}
-	// 画面
-	w.send('S', []byte("640 45"))
-	for i := 0; i < 5; i++ {
-		k, line = w.recv(t)
-		if k == 'S' {
-			break
-		}
-	}
+	// 画面と音は別の通信路
+	m := dialTestWSPath(t, ts.URL, "/ws?media=1", key)
+	m.send('M', []byte(s.code()))
+	m.send('S', []byte("640 45"))
+	k, line = m.recv(t)
 	if k != 'S' || len(line) < 500 || line[0] != 0xFF || line[1] != 0xD8 {
 		t.Fatalf("frame: %c %d", k, len(line))
 	}
+	// 同じ画面なら空の返事
+	m.send('S', []byte("640 45"))
+	if k, line = m.recv(t); k != 'S' || len(line) != 0 {
+		t.Fatalf("unchanged frame should be empty: %c %d", k, len(line))
+	}
+	// スマホだけで鳴らす: 聞いている間はPCをミュートし、止めたら戻す
+	_ = setAudioMute(false)
+	m.send('A', []byte("1m"))
+	if k, line = m.recv(t); k != 'a' || string(line) != "48000" {
+		t.Fatalf("audio format: %c %q", k, line)
+	}
+	if k, line = m.recv(t); k != 'A' || len(line) < 48000*4*40/1000 {
+		t.Fatalf("audio chunk: %c %d", k, len(line))
+	}
+	if !getAudioInfo().Mute {
+		t.Fatal("PC should be muted while listening")
+	}
+	m.send('A', []byte("0"))
+	time.Sleep(100 * time.Millisecond)
+	if getAudioInfo().Mute {
+		t.Fatal("PC mute should be restored")
+	}
+	m.c.Close()
+	// 接続コードが違うと画面用の通信路も使えない
+	m2 := dialTestWSPath(t, ts.URL, "/ws?media=1", key)
+	m2.send('M', []byte("000000"))
+	if k, line = m2.recv(t); string(line) != "NG code" {
+		t.Fatalf("media wrong code: %q", line)
+	}
+	m2.c.Close()
+
 	// 通し番号を飛ばした (録画を流し直した) ものは受け付けずに切断する
 	w.tx += 5
 	w.send('L', []byte("PING"))

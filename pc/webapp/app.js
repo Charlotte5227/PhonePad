@@ -47,16 +47,58 @@ function toast(msg) {
 const prefs = Object.assign({
   mouseSpeed: 1.5, mouseAccel: 0.6, scrollSpeed: 1.0, invertTwoFinger: false,
   turboRate: 15, positional: false, floatingSticks: true, fieldAlways: false,
-  scrControl: true, scrQuality: 1, scrDragCursor: false,
+  scrControl: true, scrQuality: 1, scrDragCursor: false, mutePc: false,
+  keyRepeatRate: 16, keyRepeatDelay: 400,
 }, load("prefs", {}));
 function savePrefs() { store("prefs", prefs); }
 
 // ---------------------------------------------------------------- 接続 (暗号化)
 
+// 暗号化した WebSocket 1本分。first は最初に送る1行 (鍵が正しいかをPCが確かめる)
+function SecureSock(path, key, first, onPayload, onClose) {
+  const ws = new WebSocket("ws://" + location.host + path);
+  ws.binaryType = "arraybuffer";
+  let k = null, tx = 0, rx = 0;
+  const self = {
+    ws,
+    get open() { return k !== null && ws.readyState === 1; },
+    send(kind, bytes) {
+      if (!this.open) return;
+      tx++;
+      const plain = new Uint8Array(bytes.length + 1);
+      plain[0] = kind.charCodeAt(0);
+      plain.set(bytes, 1);
+      ws.send(nacl.secretbox(plain, nonce(1, tx), k));
+    },
+    close() { try { ws.close(); } catch (e) {} },
+  };
+  ws.onmessage = (ev) => {
+    const data = new Uint8Array(ev.data);
+    if (!k) {
+      // "PPW1" + ランダム24バイト → この接続だけの鍵を作る
+      if (data.length !== 28 || dec.decode(data.subarray(0, 4)) !== "PPW1") { ws.close(); return; }
+      const m = new Uint8Array(32 + 24);
+      m.set(key, 0);
+      m.set(data.subarray(4), 32);
+      k = nacl.hash(m).subarray(0, 32);
+      self.send(first[0], enc.encode(first[1]));
+      if (self.onReady) setTimeout(() => self.onReady(), 0);
+      return;
+    }
+    rx++;
+    const plain = nacl.secretbox.open(data, nonce(2, rx), k);
+    if (!plain || plain.length === 0) { ws.close(); return; }
+    onPayload(String.fromCharCode(plain[0]), plain.subarray(1));
+  };
+  ws.onclose = () => onClose && onClose();
+  ws.onerror = () => {};
+  return self;
+}
+
 const Link = {
-  ws: null, key: null, code: "", k: null, tx: 0, rx: 0,
-  state: "idle", fatal: false, handlers: [], onState: [], pingTimer: 0, retryTimer: 0,
-  pcName: "", pcVersion: "",
+  main: null, media: null, key: null, code: "",
+  state: "idle", fatal: false, handlers: [], onState: [], pingTimer: 0, retryTimer: 0, mediaTimer: 0,
+  pcName: "", pcVersion: "", wantMedia: false, onMediaReady: [], mediaUsers: new Set(),
 
   init() {
     // QRコードのURL: http://PC:47806/#鍵.接続コード (ホーム画面に追加しても残るよう、そのままにする)
@@ -98,45 +140,52 @@ const Link = {
 
   connect() {
     clearTimeout(this.retryTimer);
-    if (this.ws) { try { this.ws.close(); } catch (e) {} }
+    if (this.main) this.main.close();
+    this.closeMedia();
     this.setState("connecting", "PCに接続しています…");
-    let ws;
-    try { ws = new WebSocket("ws://" + location.host + "/ws"); } catch (e) { this.retry(); return; }
-    ws.binaryType = "arraybuffer";
-    this.ws = ws;
-    let hello = false;
-    ws.onmessage = (ev) => {
-      if (ws !== this.ws) return;
-      const data = new Uint8Array(ev.data);
-      if (!hello) {
-        // "PPW1" + ランダム24バイト → この接続だけの鍵を作る
-        if (data.length !== 28 || dec.decode(data.subarray(0, 4)) !== "PPW1") { ws.close(); return; }
-        const m = new Uint8Array(32 + 24);
-        m.set(this.key, 0);
-        m.set(data.subarray(4), 32);
-        this.k = nacl.hash(m).subarray(0, 32);
-        this.tx = 0; this.rx = 0;
-        hello = true;
-        this.sendRaw("L", enc.encode("HELLO " + this.code + " " + b64(deviceName()) + " 2"));
-        return;
-      }
-      this.rx++;
-      const plain = nacl.secretbox.open(data, nonce(2, this.rx), this.k);
-      if (!plain || plain.length === 0) { ws.close(); return; }
-      const kind = String.fromCharCode(plain[0]);
-      const body = plain.subarray(1);
-      if (kind === "L") this.onLine(dec.decode(body));
-      else this.handlers.forEach((h) => h.kind === kind && h.fn(body));
-    };
-    ws.onclose = () => {
-      if (ws !== this.ws) return;
-      clearInterval(this.pingTimer);
-      if (this.fatal) return;
-      this.setState("closed", "切断されました。つなぎ直しています…", "warn");
-      this.retry();
-    };
-    ws.onerror = () => {};
+    let sock;
+    try {
+      sock = SecureSock("/ws", this.key, ["L", "HELLO " + this.code + " " + b64(deviceName()) + " 2"],
+        (kind, body) => {
+          if (sock !== this.main) return;
+          if (kind === "L") this.onLine(dec.decode(body));
+          else this.handlers.forEach((h) => h.kind === kind && h.fn(body));
+        },
+        () => {
+          if (sock !== this.main) return;
+          clearInterval(this.pingTimer);
+          this.closeMedia();
+          if (this.fatal) return;
+          this.setState("closed", "切断されました。つなぎ直しています…", "warn");
+          this.retry();
+        });
+    } catch (e) { this.retry(); return; }
+    this.main = sock;
   },
+
+  // 画面と音は別の通信路で送る (大きなデータの後ろでクリックなどが待たされないように)
+  openMedia() {
+    clearTimeout(this.mediaTimer);
+    if (this.media || this.state !== "open") return;
+    const sock = SecureSock("/ws?media=1", this.key, ["M", this.code],
+      (kind, body) => { if (sock === this.media) this.handlers.forEach((h) => h.kind === kind && h.fn(body)); },
+      () => {
+        if (sock !== this.media) return;
+        this.media = null;
+        if (this.wantMedia && this.state === "open") this.mediaTimer = setTimeout(() => this.openMedia(), 1000);
+      });
+    sock.onReady = () => { if (sock === this.media) this.onMediaReady.forEach((f) => f()); };
+    this.media = sock;
+  },
+  closeMedia() { clearTimeout(this.mediaTimer); if (this.media) { const m = this.media; this.media = null; m.close(); } },
+  // 画面・音のどちらかを使っている間だけ開いておく
+  needMedia(who, on) {
+    if (on) this.mediaUsers.add(who); else this.mediaUsers.delete(who);
+    this.wantMedia = this.mediaUsers.size > 0;
+    if (this.wantMedia) this.openMedia(); else this.closeMedia();
+  },
+  get mediaReady() { return !!(this.media && this.media.open); },
+  sendMedia(kind, bytes) { if (this.media) this.media.send(kind, bytes); },
 
   retry() {
     clearTimeout(this.retryTimer);
@@ -154,6 +203,7 @@ const Link = {
       this.setState("open", "● " + this.pcName, "ok");
       clearInterval(this.pingTimer);
       this.pingTimer = setInterval(() => this.send("PING"), 1000);
+      if (this.wantMedia) this.openMedia();
       return;
     }
     if (line.startsWith("NG code")) {
@@ -170,8 +220,9 @@ const Link = {
     }
     if (line === "BYE") {
       this.fatal = true;
+      this.closeMedia();
       this.setState("closed", "PCの画面から切断されました（ページを開き直すとつながります）", "warn");
-      try { this.ws.close(); } catch (e) {}
+      if (this.main) this.main.close();
       return;
     }
     if (line.startsWith("ER ")) { toast(unb64(line.slice(3))); return; }
@@ -181,18 +232,9 @@ const Link = {
   on(prefix, fn) { this.handlers.push({ kind: "L", prefix, fn }); },
   onData(kind, fn) { this.handlers.push({ kind, fn }); },
 
-  get ready() { return this.state === "open" && this.ws && this.ws.readyState === 1; },
+  get ready() { return this.state === "open" && this.main && this.main.open; },
 
-  send(line) { if (this.ready) this.sendRaw("L", enc.encode(line)); },
-
-  sendRaw(kind, bytes) {
-    if (!this.ws || this.ws.readyState !== 1) return;
-    this.tx++;
-    const plain = new Uint8Array(bytes.length + 1);
-    plain[0] = kind.charCodeAt(0);
-    plain.set(bytes, 1);
-    this.ws.send(nacl.secretbox(plain, nonce(1, this.tx), this.k));
-  },
+  send(line) { if (this.ready) this.main.send("L", enc.encode(line)); },
 };
 
 // nonce = 向き(1バイト) + 通し番号(8バイト, 大きい桁から) + 0
@@ -327,7 +369,9 @@ function keyButton(label, onTap, repeat) {
     e.preventDefault();
     onTap();
     if (repeat) {
-      t1 = setTimeout(() => { t2 = setInterval(onTap, 60); }, 400);
+      // 押しっぱなしの速さは設定で変えられる
+      const every = Math.round(1000 / Math.max(2, prefs.keyRepeatRate));
+      t1 = setTimeout(() => { t2 = setInterval(onTap, every); }, prefs.keyRepeatDelay);
     }
   });
   ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => b.addEventListener(ev, stop));
@@ -758,6 +802,8 @@ Views.on("moreView", (on) => {
   slider("mouseSpeed", "マウスの速さ", 0.3, 4, 0.1);
   slider("mouseAccel", "マウスの加速", 0, 1.5, 0.1);
   slider("scrollSpeed", "スクロールの速さ", 0.3, 3, 0.1);
+  slider("keyRepeatRate", "矢印キーなどを長押ししたときの速さ（回/秒）", 4, 40, 1);
+  slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
   check("invertTwoFinger", "2本指スクロールの向きを逆にする");
   check("fieldAlways", "PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ）");
   slider("turboRate", "連打の速さ（回/秒）", 5, 30, 1);
@@ -767,6 +813,7 @@ Views.on("moreView", (on) => {
 $("padReset").onclick = () => { if (confirm("コントローラーの配置を初期に戻しますか？")) { window.Pad && Pad.resetLayout(); toast("初期配置に戻しました"); } };
 
 // PCの音をスマホで聞く (このページを開いている間だけ)
+// 届く間隔のばらつきを吸収するため、少し先 (約0.12秒) に予約して鳴らす。遅れがたまったら捨てて追いつく
 const PcSound = {
   ctx: null, on: false, rate: 0, next: 0,
   toggle() {
@@ -776,25 +823,31 @@ const PcSound = {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!this.ctx) this.ctx = new AC();
       this.ctx.resume();
+      // 無音を一度鳴らして、音を出せる状態にする
+      const b = this.ctx.createBuffer(1, 1, 22050), src = this.ctx.createBufferSource();
+      src.buffer = b; src.connect(this.ctx.destination); src.start(0);
       this.next = 0;
-      Link.sendRaw("A", enc.encode("1"));
+      Link.needMedia("sound", true);
+      this.start();
     } else {
-      Link.sendRaw("A", enc.encode("0"));
+      Link.sendMedia("A", enc.encode("0"));
+      Link.needMedia("sound", false);
     }
     this.paint();
   },
+  start() { if (this.on && Link.mediaReady) { this.next = 0; Link.sendMedia("A", enc.encode(prefs.mutePc ? "1m" : "1")); } },
   paint() { $("listen").textContent = "🎧 スマホで聞く: " + (this.on ? "ON" : "OFF"); $("listen").classList.toggle("on", this.on); },
   play(bytes) {
     if (!this.on || !this.ctx || !this.rate) return;
     const n = Math.floor(bytes.length / 4);
     if (!n) return;
+    const now = this.ctx.currentTime;
+    if (this.next < now + 0.03) this.next = now + 0.12; // 途切れたら、少し貯めてから鳴らす
+    if (this.next > now + 0.4) return; // 遅れすぎ: 捨てて追いつく
     const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 4);
     const buf = this.ctx.createBuffer(2, n, this.rate);
     const L = buf.getChannelData(0), R = buf.getChannelData(1);
     for (let i = 0; i < n; i++) { L[i] = dv.getInt16(i * 4, true) / 32768; R[i] = dv.getInt16(i * 4 + 2, true) / 32768; }
-    const now = this.ctx.currentTime;
-    if (this.next < now + 0.03) this.next = now + 0.08; // 途切れたら少し先から
-    if (this.next > now + 0.5) return; // 遅れすぎは捨てる
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.connect(this.ctx.destination);
@@ -803,21 +856,81 @@ const PcSound = {
   },
 };
 $("listen").onclick = () => PcSound.toggle();
-Link.onData("a", (b) => { PcSound.rate = parseInt(dec.decode(b), 10) || 48000; });
+$("mutePc").checked = !!prefs.mutePc;
+$("mutePc").onchange = () => { prefs.mutePc = $("mutePc").checked; savePrefs(); if (PcSound.on) PcSound.start(); };
+Link.onData("a", (b) => { PcSound.rate = parseInt(dec.decode(b), 10) || 48000; PcSound.next = 0; });
 Link.onData("A", (b) => PcSound.play(b));
-Link.onState.push((s) => { if (s === "open" && PcSound.on) { PcSound.next = 0; Link.sendRaw("A", enc.encode("1")); } });
+Link.onMediaReady.push(() => PcSound.start());
+document.addEventListener("visibilitychange", () => {
+  // 戻ってきたら鳴らし直す (iPhone は裏に回ると音を止めるため)
+  if (document.visibilityState === "visible" && PcSound.ctx && PcSound.on) { PcSound.ctx.resume(); PcSound.next = 0; }
+});
 
 // ヘルプ
 const openHelp = () => { $("helpSheet").hidden = false; };
-$("helpBtn").onclick = openHelp;
 $("helpBtn2").onclick = openHelp;
 $("helpClose").onclick = () => { $("helpSheet").hidden = true; };
 $("helpSheet").addEventListener("click", (e) => { if (e.target === $("helpSheet")) $("helpSheet").hidden = true; });
+$("guideLink").onclick = () => { window.open("https://charlotte5227.github.io/PhonePad/guide.html", "_blank"); };
+
+// 画面ごとの使い方 (初めて開いたときに一度だけ自動で出す)
+const COACH = {
+  kbView: ["キーボードとマウス", [
+    "上の入力欄をタップして文字を打つと、すぐPCに入ります。日本語の変換も使えます。",
+    "下の大きな面がマウスです。なぞる=カーソル移動、左半分をタップ=左クリック、右半分をタップ=右クリック。",
+    "2本指でなぞる=スクロール。長押ししてから動かす=ドラッグ。",
+    "「長押し」ボタンを押しながらなぞる=スクロール。何もせず離す=中クリック。",
+    "Ctrl・Shift・Alt・Win は、1回押すと次の1キーだけ、2回押すと押しっぱなし（もう1回で解除）。",
+    "★ でコピー・貼り付けなどのショートカットや、アプリ・サイトを開けます。",
+  ]],
+  padView: ["コントローラー", [
+    "スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えます。",
+    "L・R のスティックは、触れた位置に出ます（設定で固定にもできます）。",
+    "T を押す=「押している間は連打」のON/OFF。ボタンを押しながら T=そのボタンだけ自動連打。",
+    "✎=ボタンの位置・大きさ・形を変える。⌨=キーボードに戻る。⚙=設定。",
+  ]],
+  scrView: ["PCの画面", [
+    "「操作: ON」のとき: タップ=クリック、長押し=右クリック、長押ししてから動かす=ドラッグ。",
+    "1本指でなぞる=スクロール（「☐ なぞってカーソル移動」にチェックでカーソル移動）。2本指でなぞる=スクロール。",
+    "2本指で広げる・つまむ=拡大・縮小。2本指タップ=右クリック、3本指タップ=中クリック。",
+    "⌨=文字を入力。「← 戻る」でキーボード画面へ。反応が遅いときは「画質」を下げてください。",
+  ]],
+};
+function showCoach(id) {
+  const c = COACH[id];
+  if (!c) { openHelp(); return; }
+  $("coachTitle").textContent = c[0] + "の使い方";
+  const ul = $("coachList");
+  ul.textContent = "";
+  c[1].forEach((t) => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+  $("coachSheet").hidden = false;
+}
+$("coachOk").onclick = () => { $("coachSheet").hidden = true; };
+$("coachMore").onclick = () => { $("coachSheet").hidden = true; openHelp(); };
+$("coachSheet").addEventListener("click", (e) => { if (e.target === $("coachSheet")) $("coachSheet").hidden = true; });
+$("helpBtn").onclick = () => showCoach(Views.current);
+$("howKb").onclick = () => showCoach("kbView");
+$("howPad").onclick = () => showCoach("padView");
+$("howScr").onclick = () => showCoach("scrView");
+for (const id of Object.keys(COACH)) {
+  Views.on(id, (on) => {
+    if (on && Link.state !== "idle" && !load("coach." + id, false)) { store("coach." + id, true); setTimeout(() => showCoach(id), 300); }
+  });
+}
 Link.onState.push((s) => {
   if (s === "open") $("aboutVer").textContent = "PhonePad ブラウザ版（PC: " + Link.pcName + " / v" + Link.pcVersion + "）";
 });
 
-// 初めて開いたときは、できること・できないことを見せる
+// 初めて開いたときは、できること・できないことを見せる (閉じたらキーボード画面の使い方)
 if (Link.init()) {
-  if (!load("helpSeen", false)) { store("helpSeen", true); openHelp(); }
+  if (!load("helpSeen", false)) {
+    store("helpSeen", true);
+    openHelp();
+    const close = $("helpClose").onclick;
+    $("helpClose").onclick = () => {
+      close();
+      $("helpClose").onclick = close;
+      if (!load("coach.kbView", false)) { store("coach.kbView", true); showCoach("kbView"); }
+    };
+  } else if (!load("coach.kbView", false)) { store("coach.kbView", true); showCoach("kbView"); }
 }

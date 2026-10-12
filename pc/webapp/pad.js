@@ -379,6 +379,8 @@ const Pad = (function () {
     draw();
   }
 
+  document.getElementById("padBack").onclick = () => Views.show("kbView");
+
   loadLayout();
   window.addEventListener("resize", () => { if (Views.current === "padView") setTimeout(resize, 50); });
   Views.on("padView", (on) => {

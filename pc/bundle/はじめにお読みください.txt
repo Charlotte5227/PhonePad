@@ -3,6 +3,8 @@
 
 ■ 配布サイト（最新版・過去のバージョン・変更内容）
   https://charlotte5227.github.io/PhonePad/
+■ 使い方（画面ごとの使い方・困ったとき）
+  https://charlotte5227.github.io/PhonePad/guide.html
 
 ■ フォルダの中身
   PhonePad.exe              … PC側のソフト

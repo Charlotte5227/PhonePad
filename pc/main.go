@@ -106,6 +106,7 @@ func main() {
 	}
 
 	cleanupOldExe()
+	restoreMuteAfterCrash()
 	go updateLoop()
 	if afterUpdate {
 		log.Printf("v%s に更新しました", appVersion)

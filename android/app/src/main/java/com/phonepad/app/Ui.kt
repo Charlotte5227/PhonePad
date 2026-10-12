@@ -138,7 +138,7 @@ class KeyButton(
     private val repeatRun = object : Runnable {
         override fun run() {
             onTap?.invoke()
-            h.postDelayed(this, 55)
+            h.postDelayed(this, (1000 / Prefs.keyRepeatRate.coerceIn(2, 60)).toLong())
         }
     }
     private val longRun = Runnable {
@@ -180,7 +180,7 @@ class KeyButton(
                 refresh()
                 Haptics.tick()
                 onDown?.invoke()
-                if (repeat || onLongPress != null) h.postDelayed(longRun, if (repeat) 380 else 450)
+                if (repeat || onLongPress != null) h.postDelayed(longRun, if (repeat) Prefs.keyRepeatDelay.toLong() else 450)
             }
 
             MotionEvent.ACTION_UP -> {
