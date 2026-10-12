@@ -33,6 +33,11 @@ android {
         }
     }
 
+    // 対応している一番古い Android (minSdk) で使えない機能を使ったら、組み立てを失敗させる
+    lint {
+        fatal += "NewApi"
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

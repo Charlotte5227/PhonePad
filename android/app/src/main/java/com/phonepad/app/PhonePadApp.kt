@@ -25,7 +25,6 @@ class PhonePadApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Prefs.init(this)
-        Haptics.init(this)
 
         // 強制終了したときは原因をファイルに残し、次回起動時に表示する
         val prev = Thread.getDefaultUncaughtExceptionHandler()
@@ -40,6 +39,7 @@ class PhonePadApp : Application() {
             }
             prev?.uncaughtException(t, e)
         }
+        Haptics.init(this)
 
         // PCとつながったら、PCのソフトの更新も確認する
         Link.addListener { st -> if (st == Link.State.CONNECTED) Updater.onConnected() }
