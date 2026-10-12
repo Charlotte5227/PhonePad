@@ -281,15 +281,24 @@ document.querySelectorAll("#tabs button").forEach((b) => { b.onclick = () => Vie
 if (window.visualViewport) {
   const vv = window.visualViewport;
   const fit = () => {
-    const shrunk = vv.height < window.innerHeight - 60;
+    // 見えている範囲 (キーボードやツールバーを除いた部分) にぴったり合わせる
+    const full = document.documentElement.clientHeight;
+    const shrunk = vv.height < full - 1;
     document.body.style.height = shrunk ? vv.height + "px" : "";
-    document.body.style.bottom = shrunk ? "auto" : "";
     document.body.style.transform = shrunk && vv.offsetTop ? "translateY(" + vv.offsetTop + "px)" : "";
     window.dispatchEvent(new Event("pp-resize"));
   };
   vv.addEventListener("resize", fit);
   vv.addEventListener("scroll", fit);
+  window.addEventListener("load", fit);
+  setTimeout(fit, 300);
 }
+
+// iPhone で2本指の操作をしたときに、ページ全体が拡大されてずれないようにする
+["gesturestart", "gesturechange", "gestureend"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+document.addEventListener("touchmove", (e) => { if (e.scale !== undefined && e.scale !== 1) e.preventDefault(); }, { passive: false });
+// ずれてしまったときは元に戻す
+window.addEventListener("scroll", () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); });
 
 // ---------------------------------------------------------------- 修飾キー (Ctrl など)
 
@@ -943,6 +952,12 @@ for (const id of Object.keys(COACH)) {
 Link.onState.push((s) => {
   if (s === "open") $("aboutVer").textContent = "PhonePad ブラウザ版（PC: " + Link.pcName + " / v" + Link.pcVersion + "）";
 });
+
+// iPhone の Safari で開いているときは、ホーム画面への追加をすすめる (一度だけ)
+if (IS_IOS && navigator.standalone === false && !load("a2hsTip", false)) {
+  store("a2hsTip", true);
+  setTimeout(() => toast("Safari の共有ボタン（□↑）→「ホーム画面に追加」で開くと、画面を広く使えて操作しやすくなります"), 4000);
+}
 
 // 初めて開いたときは、できること・できないことを見せる (閉じたらキーボード画面の使い方)
 if (Link.init()) {

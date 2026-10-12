@@ -24,7 +24,10 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
     font: 15px/1.5 -apple-system, "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif;
     overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  body { display: flex; flex-direction: column; overflow: hidden; position: fixed; inset: 0; }
+  body { display: flex; flex-direction: column; overflow: hidden; position: fixed; top: 0; left: 0; width: 100%;
+    /* iPhone の Safari では下のツールバーの裏まで画面が伸びることがあるので、ツールバーを除いた高さにする */
+    height: 100%; height: 100svh; }
+  html { overflow: hidden; }
   button { font: inherit; color: var(--ink); background: var(--surface2); border: 1px solid var(--line);
     border-radius: 12px; padding: 0 10px; min-height: 44px; touch-action: manipulation; }
   button:active, button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
