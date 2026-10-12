@@ -55,7 +55,12 @@
   .foot { margin-top: 24px; color: var(--sub); font-size: 13px; }
   .foot a { color: var(--accent); }
   .linkish { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: 13px; }
-  #devices:empty::before { content: "まだ接続されていません"; color: var(--sub); }
+  .devs { list-style: none; margin: 0; padding: 0; }
+  .devs:empty::before { content: "まだ接続されていません"; color: var(--sub); }
+  .devs li { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  .devs .who { flex: 1; min-width: 0; }
+  .devs .who small { display: block; color: var(--sub); font-size: 12px; }
+  .devs button { padding: 2px 10px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -85,7 +90,7 @@
       <dl>
         <dt>PC名</dt><dd id="pc">-</dd>
         <dt>IPアドレス</dt><dd id="ips">-</dd>
-        <dt>接続中の端末</dt><dd id="devices"></dd>
+        <dt>接続中のスマホ</dt><dd><ul class="devs" id="devices"></ul></dd>
         <dt>コントローラー</dt><dd><span id="pad" class="pill">-</span></dd>
       </dl>
       <div class="actions">
@@ -130,7 +135,7 @@
 </main>
 <script src="qrcode.js"></script>
 <script>
-  let lastQR = "", lastSite = null;
+  let lastQR = "", lastSite = null, lastDevs = "";
   const $ = (id) => document.getElementById(id);
 
   function drawQR(text, el) {
@@ -154,7 +159,7 @@
       $("code").textContent = s.code;
       $("pc").textContent = s.pcName;
       $("ips").textContent = s.ips.join(", ") + "（ポート " + s.port + "）";
-      $("devices").textContent = (s.devices || []).join("、");
+      renderDevices(s.deviceList || []);
       const pad = $("pad");
       pad.textContent = s.gamepad;
       pad.className = "pill " + (s.gamepadReady ? "ok" : "warn");
@@ -173,7 +178,36 @@
       }
       $("updMsg").textContent = u.error ? "（" + u.error + "）" : "";
     } catch (e) {
+      lastDevs = "";
       $("devices").textContent = "PhonePad PC が終了しています";
+    }
+  }
+
+  // 接続中のスマホの一覧 (変わったときだけ描き直す)
+  function renderDevices(list) {
+    const key = JSON.stringify(list);
+    if (key === lastDevs) return;
+    lastDevs = key;
+    const ul = $("devices");
+    ul.textContent = "";
+    for (const d of list) {
+      const li = document.createElement("li");
+      const who = document.createElement("div");
+      who.className = "who";
+      who.textContent = d.name;
+      const sm = document.createElement("small");
+      sm.textContent = d.ip + "・" + d.since + " から";
+      who.appendChild(sm);
+      const b = document.createElement("button");
+      b.textContent = "切断";
+      b.title = "このスマホとの接続を切ります";
+      b.onclick = async () => {
+        if (!confirm("「" + d.name + "」を切断しますか？\nこのスマホは自動ではつなぎ直しません。\n二度とつながらないようにするには「接続コードを変更」も押してください。")) return;
+        await fetch("/api/kick?id=" + d.id, { method: "POST" });
+        refresh();
+      };
+      li.append(who, b);
+      ul.appendChild(li);
     }
   }
 

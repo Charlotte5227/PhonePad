@@ -26,6 +26,8 @@ type session struct {
 	conn       net.Conn
 	remoteIP   string
 	deviceName string
+	id         int       // 状態ページで端末を指定するための番号
+	since      time.Time // 接続した時刻
 
 	wmu     sync.Mutex
 	fieldMu sync.Mutex    // 入力欄の問い合わせを1つずつ処理する
@@ -75,6 +77,9 @@ func (s *server) handleConn(c net.Conn) {
 	}
 
 	s.mu.Lock()
+	s.nextID++
+	ss.id = s.nextID
+	ss.since = time.Now()
 	s.sessions[ss] = struct{}{}
 	s.mu.Unlock()
 	log.Printf("接続しました: %s (%s)", ss.deviceName, ip)

@@ -41,6 +41,9 @@ class PhonePadApp : Application() {
             prev?.uncaughtException(t, e)
         }
 
+        // PCとつながったら、PCのソフトの更新も確認する
+        Link.addListener { st -> if (st == Link.State.CONNECTED) Updater.onConnected() }
+
         // アプリが画面から消えたら、押しっぱなしの入力をPC側で全部離す
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(a: Activity) {
@@ -56,12 +59,14 @@ class PhonePadApp : Application() {
                     Link.foreground = false
                     Link.send("RA")
                     PcAudio.stop()
+                    Updater.onAppBackground()
                 }
             }
 
             override fun onActivityCreated(a: Activity, b: Bundle?) {}
-            override fun onActivityResumed(a: Activity) {}
-            override fun onActivityPaused(a: Activity) {}
+            // 開いたときに新しいバージョンがあれば知らせる
+            override fun onActivityResumed(a: Activity) = Updater.onResumed(a)
+            override fun onActivityPaused(a: Activity) = Updater.onPaused(a)
             override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
             override fun onActivityDestroyed(a: Activity) {}
         })

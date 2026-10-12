@@ -335,12 +335,19 @@ object Link {
                 }
             }
         }
+        var kicked = false
         try {
             val rd = r.reader!!
             while (alive.get() && gen == generation) {
                 val line = rd.readLine() ?: break
                 when {
                     line == "PONG" -> {}
+                    line == "BYE" -> {
+                        // PCの画面で「切断」された: 自動でつなぎ直さない
+                        kicked = true
+                        break
+                    }
+
                     line.startsWith("MI ") -> {
                         // 電源を入れるためのアドレスを覚える
                         val mac = line.removePrefix("MI ").trim()
@@ -407,6 +414,15 @@ object Link {
         writer.interrupt()
         pinger.interrupt()
         if (socket === s) socket = null
+        if (kicked && gen == generation) {
+            generation++
+            PcAudio.stop()
+            val msg = "PCの画面から切断されました。もう一度つなぐときは「未接続」を押して接続し直してください。"
+            lastError = msg
+            setState(State.DISCONNECTED)
+            main.post { onError?.invoke(msg) }
+            return
+        }
         if (gen == generation) setState(State.CONNECTING)
     }
 }

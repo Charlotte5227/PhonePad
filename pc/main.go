@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ type server struct {
 	certFP   string // 証明書の指紋 (QRコードに入れる)
 	pcName   string
 	sessions map[*session]struct{}
+	nextID   int
 	fails    map[string][]time.Time
 }
 
@@ -268,19 +270,39 @@ func (s *server) runDiscovery() {
 // ---- 状態表示ページ (このPCからのみアクセス可) ----
 
 func (s *server) runStatusPage() {
+	srv := &http.Server{
+		Addr:              fmt.Sprintf("127.0.0.1:%d", statusPort),
+		Handler:           localOnly(s.statusMux()),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
+		log.Println("状態ページを開始できませんでした:", err)
+	}
+}
+
+func (s *server) statusMux() *http.ServeMux {
 	sub, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		type devInfo struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			IP    string `json:"ip"`
+			Since string `json:"since"`
+		}
 		s.mu.Lock()
 		var devs []string
+		list := []devInfo{}
 		for ss := range s.sessions {
 			devs = append(devs, ss.deviceName+" ("+ss.remoteIP+")")
+			list = append(list, devInfo{ss.id, ss.deviceName, ss.remoteIP, ss.since.Format("15:04")})
 		}
 		code := s.cfg.Code
 		port := s.cfg.Port
 		s.mu.Unlock()
 		sort.Strings(devs)
+		sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
 		ips := localIPv4s()
 		qr := fmt.Sprintf("PHONEPAD|%d|%s|%s|%s|%s", port, code, strings.Join(ips, ","), s.pcName, s.certFP)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -293,6 +315,7 @@ func (s *server) runStatusPage() {
 			"ips":           ips,
 			"qr":            qr,
 			"devices":       devs,
+			"deviceList":    list,
 			"gamepad":       gamepadStatusText(),
 			"gamepadReady":  gamepadReady(),
 			"driverPresent": driverInstallerPath() != "",
@@ -315,6 +338,30 @@ func (s *server) runStatusPage() {
 			ss.conn.Close()
 		}
 		s.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// 接続中のスマホを切断する (スマホは自動でつなぎ直さない)
+	mux.HandleFunc("/api/kick", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
+		s.mu.Lock()
+		var target *session
+		for ss := range s.sessions {
+			if ss.id == id {
+				target = ss
+			}
+		}
+		s.mu.Unlock()
+		if target == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("PCの画面から切断: %s (%s)", target.deviceName, target.remoteIP)
+		target.send("BYE")
+		time.AfterFunc(300*time.Millisecond, func() { target.conn.Close() })
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/api/install-driver", func(w http.ResponseWriter, r *http.Request) {
@@ -383,14 +430,7 @@ func (s *server) runStatusPage() {
 		initGamepadSystem()
 		w.WriteHeader(http.StatusNoContent)
 	})
-	srv := &http.Server{
-		Addr:              fmt.Sprintf("127.0.0.1:%d", statusPort),
-		Handler:           localOnly(mux),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	if err := srv.ListenAndServe(); err != nil {
-		log.Println("状態ページを開始できませんでした:", err)
-	}
+	return mux
 }
 
 // 他サイトからのリクエスト(DNSリバインディング等)を拒否する

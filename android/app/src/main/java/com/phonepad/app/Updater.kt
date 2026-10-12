@@ -24,8 +24,77 @@ object Updater {
     const val SITE = "https://charlotte5227.github.io/PhonePad/"
     private const val APK_NAME = "PhonePad.apk"
 
-    /** このアプリを開いている間に、自動の確認を済ませたか */
-    private var checkedThisRun = false
+    // ---- 自動の確認 ----
+    // アプリを開くたびに確認し、新しいバージョンがあればポップアップで知らせる。
+    // 「あとで」を押したら、次にアプリを開き直すまでは同じ知らせを出さない。
+
+    /** 今回アプリを開いてから、知らせ済みか */
+    private var toldApp = false
+    private var toldPc = false
+    private var dialogOpen = false
+
+    /** 確認結果の使い回し (短い間に何度も問い合わせない) */
+    private var cached: Release? = null
+    private var cachedAt = 0L
+    private var fetching = false
+
+    /** 今いる画面 (ゲーム中・画面表示中は知らせない) */
+    private var current: Activity? = null
+
+    /** アプリが画面から消えたとき: 次に開いたときにまた知らせる */
+    fun onAppBackground() {
+        toldApp = false
+        toldPc = false
+    }
+
+    fun onResumed(act: Activity) {
+        current = act
+        if (act is ControllerActivity || act is ScreenActivity) return
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ autoCheck() }, 1500)
+    }
+
+    fun onPaused(act: Activity) {
+        if (current === act) current = null
+    }
+
+    /** PCとつながったとき (PCのソフトの更新も分かるようになる) */
+    fun onConnected() {
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ autoCheck() }, 1500)
+    }
+
+    private fun autoCheck() {
+        val act = current ?: return
+        if (act is ControllerActivity || act is ScreenActivity) return
+        if (dialogOpen || fetching) return
+        if (toldApp && (toldPc || Link.state != Link.State.CONNECTED)) return
+        val c = cached
+        if (c != null && System.currentTimeMillis() - cachedAt < 10 * 60_000L) {
+            offer(act, c)
+            return
+        }
+        fetching = true
+        thread(isDaemon = true) {
+            val r = fetchLatest()
+            act.runOnUiThread {
+                fetching = false
+                if (r == null) return@runOnUiThread
+                cached = r
+                cachedAt = System.currentTimeMillis()
+                val now = current ?: return@runOnUiThread
+                offer(now, r)
+            }
+        }
+    }
+
+    private fun offer(act: Activity, r: Release) {
+        if (act.isFinishing || act.isDestroyed || dialogOpen) return
+        val appNew = !toldApp && isNewer(r.version, currentVersion(act))
+        val pcVer = Link.pcVersion
+        val pcNew = !toldPc && pcVer.isNotEmpty() && Link.state == Link.State.CONNECTED && isNewer(r.version, pcVer)
+        toldApp = true
+        if (Link.state == Link.State.CONNECTED && pcVer.isNotEmpty()) toldPc = true
+        if (appNew || pcNew) showDialog(act, r, appNew, pcNew)
+    }
 
     data class Release(val version: String, val notes: String, val apkUrl: String?)
 
@@ -72,10 +141,8 @@ object Updater {
         }
     }
 
-    /** 起動時の自動確認 (1回だけ)。manual=true は設定画面の「更新を確認」 */
-    fun check(act: Activity, manual: Boolean) {
-        if (!manual && checkedThisRun) return
-        checkedThisRun = true
+    /** 設定画面の「新しいバージョンを確認」 */
+    fun check(act: Activity, manual: Boolean = true) {
         thread(isDaemon = true) {
             val r = fetchLatest()
             act.runOnUiThread {
@@ -84,6 +151,8 @@ object Updater {
                     if (manual) toast(act, "更新を確認できませんでした（インターネットにつながっているか確認してください）")
                     return@runOnUiThread
                 }
+                cached = r
+                cachedAt = System.currentTimeMillis()
                 val appNew = isNewer(r.version, currentVersion(act))
                 val pcVer = Link.pcVersion
                 val pcNew = pcVer.isNotEmpty() && Link.state == Link.State.CONNECTED && isNewer(r.version, pcVer)
@@ -120,6 +189,8 @@ object Updater {
                 if (url == null) toast(act, "更新用のファイルが見つかりません") else downloadAndInstall(act, url)
             }
         }
+        dialogOpen = true
+        b.setOnDismissListener { dialogOpen = false }
         b.show()
     }
 
@@ -135,7 +206,7 @@ object Updater {
                     act.startActivity(
                         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${act.packageName}")),
                     )
-                    checkedThisRun = false
+                    toldApp = false
                 }
                 .setNegativeButton("キャンセル", null)
                 .show()

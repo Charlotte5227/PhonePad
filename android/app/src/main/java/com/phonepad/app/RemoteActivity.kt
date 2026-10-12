@@ -404,8 +404,6 @@ class RemoteActivity : Activity() {
         }
         Link.onField = { pcField.update(it) }
         updateFieldVisibility()
-        // 新しいバージョンの確認 (アプリを開いている間に1回)
-        handler.postDelayed({ if (resumed) Updater.check(this, false) }, 3000)
         Link.onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
         handler.removeCallbacks(fieldPoll)
         handler.post(fieldPoll)

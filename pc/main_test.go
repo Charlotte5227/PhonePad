@@ -7,11 +7,13 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -369,5 +371,66 @@ func TestAudioStream(t *testing.T) {
 	hub.mu.Unlock()
 	if running {
 		t.Fatal("capture should stop when nobody listens")
+	}
+}
+
+// 状態ページに接続中のスマホが出て、「切断」で BYE が届くこと
+func TestDeviceListKick(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s.loadConfig()
+	a, b := net.Pipe()
+	go s.handleConn(a)
+	br := bufio.NewReader(b)
+	go b.Write([]byte("HELLO " + s.code() + " " + base64.StdEncoding.EncodeToString([]byte("Pixel")) + " 1\n"))
+	if l, _ := br.ReadString('\n'); !strings.HasPrefix(l, "OK") {
+		t.Fatal(l)
+	}
+	ts := httptest.NewServer(s.statusMux())
+	defer ts.Close()
+	r, err := http.Get(ts.URL + "/api/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st struct {
+		DeviceList []struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+			IP   string `json:"ip"`
+		} `json:"deviceList"`
+	}
+	json.NewDecoder(r.Body).Decode(&st)
+	r.Body.Close()
+	if len(st.DeviceList) != 1 || st.DeviceList[0].Name != "Pixel" {
+		t.Fatalf("device list: %+v", st.DeviceList)
+	}
+	got := make(chan string, 4)
+	go func() {
+		for {
+			l, err := br.ReadString('\n')
+			if err != nil {
+				close(got)
+				return
+			}
+			got <- strings.TrimSpace(l)
+		}
+	}()
+	pr, err := http.Post(ts.URL+"/api/kick?id="+strconv.Itoa(st.DeviceList[0].ID), "text/plain", nil)
+	if err != nil || pr.StatusCode != 204 {
+		t.Fatalf("kick: %v %v", err, pr)
+	}
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case l, ok := <-got:
+			if !ok {
+				t.Fatal("closed before BYE")
+			}
+			if l == "BYE" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("BYE not received")
+		}
 	}
 }
