@@ -31,6 +31,7 @@ class ScreenActivity : Activity() {
     private lateinit var ctrlBtn: KeyButton
     private lateinit var qualityBtn: KeyButton
     private lateinit var kbBtn: KeyButton
+    private lateinit var dragBtn: KeyButton
     private lateinit var input: KeyInputView
     private var imeShown = false
 
@@ -68,7 +69,9 @@ class ScreenActivity : Activity() {
                 if (Prefs.screenControl) {
                     android.widget.Toast.makeText(
                         this@ScreenActivity,
-                        "タップ=クリック　長押し=右クリック　長押しして動かす=ドラッグ\nなぞる・2本指でなぞる=スクロール　2本指で広げる=拡大",
+                        "タップ=クリック　長押し=右クリック　長押しして動かす=ドラッグ\n" +
+                            "2本指でなぞる=スクロール　2本指で広げる=拡大\n" +
+                            "1本指でなぞる=" + (if (Prefs.screenDragCursor) "カーソル移動" else "スクロール") + "（☑で切り替え）",
                         android.widget.Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -84,6 +87,16 @@ class ScreenActivity : Activity() {
             }
         }
         bar.addView(qualityBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
+        // 1本指でなぞったときの動き: チェックでカーソル移動、外すとスクロール
+        dragBtn = KeyButton(this, "", 13f).apply {
+            alpha = 0.85f
+            setPadding(dpi(12), 0, dpi(12), 0)
+            onTap = {
+                Prefs.screenDragCursor = !Prefs.screenDragCursor
+                refreshButtons()
+            }
+        }
+        bar.addView(dragBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
 
         // 文字入力: 画面の下に入力欄を出し、確定した文字をすぐPCへ送る
         input = KeyInputView(this).apply {
@@ -107,7 +120,12 @@ class ScreenActivity : Activity() {
             setPadding(dpi(10), 0, 0, 0)
         }
         bar.addView(status)
-        root.addView(bar, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+        // ボタンが画面に入りきらないときは横にずらして見られるようにする
+        val barScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(bar)
+        }
+        root.addView(barScroll, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
         root.addView(input, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
             setMargins(dpi(8), 0, dpi(8), dpi(6))
         })
@@ -141,6 +159,10 @@ class ScreenActivity : Activity() {
             0 -> "低"; 2 -> "高"; else -> "標準"
         }
         screen.control = Prefs.screenControl
+        screen.dragCursor = Prefs.screenDragCursor
+        dragBtn.text = (if (Prefs.screenDragCursor) "☑" else "☐") + " なぞってカーソル移動"
+        dragBtn.active = if (Prefs.screenDragCursor) 1 else 0
+        dragBtn.visibility = if (Prefs.screenControl) View.VISIBLE else View.GONE
     }
 
     private fun showIme() {
@@ -285,12 +307,15 @@ class ScreenActivity : Activity() {
 /**
  * PC画面の表示。2本指で広げる/つまむ=拡大縮小。
  * 操作ONのとき: タップ=左クリック、長押し=右クリック、長押しして動かす=ドラッグ、
- *   なぞる=スクロール (拡大中は表示の移動)、2本指でなぞる=スクロール、
+ *   なぞる=スクロールかカーソル移動 (設定。スクロールの設定で拡大中は表示の移動)、2本指でなぞる=スクロール、
  *   2本指タップ=右クリック、3本指タップ=中クリック
  */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
 class ScreenView(ctx: Context) : View(ctx) {
     var control = true
+
+    /** 1本指でなぞったとき: true=カーソル移動 / false=スクロール */
+    var dragCursor = false
     private var bmp: Bitmap? = null
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val matrix = Matrix()
@@ -366,6 +391,7 @@ class ScreenView(ctx: Context) : View(ctx) {
     private var longPressed = false
     private var dragging = false
     private var scrolling1 = false
+    private var cursorMoving = false
     private var pinchDist = 0f
     private var pinchZoom = 1f
     private var startMidX = 0f
@@ -400,6 +426,7 @@ class ScreenView(ctx: Context) : View(ctx) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
                 moved = false; multi = false; longPressed = false; dragging = false; scrolling1 = false
+                cursorMoving = false
                 downTime = System.currentTimeMillis()
                 maxPointers = 1
                 wheel.reset()
@@ -458,10 +485,14 @@ class ScreenView(ctx: Context) : View(ctx) {
                     if (!moved && hypot(e.x - downX, e.y - downY) > slop) {
                         moved = true
                         removeCallbacks(longPress)
-                        // 操作ONで拡大していないとき、1本指でなぞるとスクロール
-                        if (control && !longPressed && !zoomed) {
-                            scrolling1 = true
-                            sendMove(downX, downY)
+                        // 操作ONのとき、1本指でなぞると カーソル移動 か スクロール (拡大中のスクロール設定は表示の移動)
+                        if (control && !longPressed) {
+                            if (dragCursor) {
+                                cursorMoving = true
+                            } else if (!zoomed) {
+                                scrolling1 = true
+                                sendMove(downX, downY)
+                            }
                         }
                     }
                     if (control && longPressed) {
@@ -471,6 +502,8 @@ class ScreenView(ctx: Context) : View(ctx) {
                             Link.send("MB L 1")
                             dragging = true
                         }
+                        sendMove(e.x, e.y)
+                    } else if (cursorMoving) {
                         sendMove(e.x, e.y)
                     } else if (scrolling1) {
                         scroll(e.x - lastX, e.y - lastY)
@@ -532,6 +565,7 @@ class ScreenView(ctx: Context) : View(ctx) {
                 }
                 dragging = false
                 scrolling1 = false
+                cursorMoving = false
             }
 
             MotionEvent.ACTION_CANCEL -> {

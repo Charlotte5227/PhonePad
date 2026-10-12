@@ -120,6 +120,11 @@ object Prefs {
         get() = b("screenControl", true)
         set(v) = sp.edit().putBoolean("screenControl", v).apply()
 
+    /** PC画面表示で1本指でなぞったとき: true=マウスカーソルを動かす / false=スクロール */
+    var screenDragCursor: Boolean
+        get() = b("screenDragCursor", false)
+        set(v) = sp.edit().putBoolean("screenDragCursor", v).apply()
+
     /** PCの音をスマホで聞く */
     var pcAudio: Boolean
         get() = b("pcAudio", false)
