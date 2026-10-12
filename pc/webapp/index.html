@@ -94,6 +94,14 @@
   .keyrow button { flex: none; min-width: 46px; min-height: 40px; font-size: 14px; padding: 0 8px; border-radius: 10px; }
   .scrPanel .inrow button { flex: none; }
   .typingScr .scrbar { display: none; }
+  /* 横向き: ボタンは「☰」1つにしまい、押すと縦に並べて出す */
+  #scrMenu { display: none; }
+  .land .scrbar { flex-direction: column; align-items: flex-start; right: auto; overflow: visible; max-height: calc(100% - 12px); }
+  .land #scrMenu { display: block; width: 44px; padding: 0; font-size: 18px; opacity: .8; }
+  .land .scrbar > :not(#scrMenu) { display: none; }
+  .land .scrbar.open > :not(#scrMenu):not([hidden]) { display: block; }
+  .land .scrbar.open #scrMenu { opacity: 1; }
+  .land .scrbar.open { background: rgba(27,24,21,.82); border-radius: 14px; padding: 6px; margin: -6px; }
   /* iPhone: 上の端からなぞると通知センターなどが出るので、端から離す */
   .ios .top { padding-top: max(calc(var(--st) + 6px), 18px); }
   .ios .edit { top: max(calc(var(--st) + 6px), 30px); }
@@ -204,6 +212,7 @@
     <div class="scrArea" id="scrArea">
       <canvas id="scrCanvas"></canvas>
       <div class="scrbar" id="scrBar">
+        <button id="scrMenu" aria-label="メニュー">☰</button>
         <button id="scrCtrl"></button>
         <button id="scrQual"></button>
         <button id="scrDrag"></button>

@@ -168,12 +168,26 @@
   function sendMove(x, y) { const p = toPc(x, y); if (!p) return false; Link.send("MA " + p[0] + " " + p[1]); return true; }
   function noteTap(x, y) { const p = toPc(x, y); if (p) { lastU = p[0] / 65535; lastV = p[1] / 65535; } }
 
+  // 横向きでは、上のボタンを「☰」にしまう
+  const bar = document.getElementById("scrBar");
+  const menuBtn = document.getElementById("scrMenu");
+  menuBtn.onclick = () => bar.classList.toggle("open");
+  // 他のボタンを押したら閉じる (☰ 自身と、続けて押すことが多い「画質」は除く)
+  bar.addEventListener("click", (e) => {
+    if (e.target !== menuBtn && e.target.id !== "scrQual" && e.target.tagName === "BUTTON") setTimeout(() => bar.classList.remove("open"), 150);
+  });
+  function setLand(on) {
+    view.classList.toggle("land", on);
+    if (!on) bar.classList.remove("open");
+  }
+
   function resize() {
     const r = cv.getBoundingClientRect();
     if (!r.width) return;
     dpr = window.devicePixelRatio || 1;
     W = r.width; H = r.height;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    setLand(W > H);
     draw();
   }
   window.addEventListener("resize", () => { if (active) setTimeout(resize, 50); });
@@ -226,6 +240,7 @@
 
   cv.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    bar.classList.remove("open");
     cv.setPointerCapture(e.pointerId);
     const p = pos(e);
     pts.set(e.pointerId, p);

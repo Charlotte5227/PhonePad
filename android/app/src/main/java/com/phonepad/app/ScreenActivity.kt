@@ -193,6 +193,23 @@ class ScreenActivity : Activity() {
         }
         screenFrame.addView(barScroll, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
         this.barScroll = barScroll
+        // 横向きでは、上のボタンを「☰」にしまう (押すと出る。画面に触れるとしまう)
+        menuBtn = KeyButton(this, "☰", 18f).apply {
+            alpha = 0.8f
+            visibility = View.GONE
+            onTap = { setMenuOpen(!menuOpen) }
+        }
+        screenFrame.addView(menuBtn, FrameLayout.LayoutParams(dpi(46), dpi(40), Gravity.TOP or Gravity.START).apply {
+            setMargins(dpi(8), dpi(8), 0, 0)
+        })
+        screen.onTouchStart = { if (land && menuOpen) setMenuOpen(false) }
+        screenFrame.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
+            val isLand = (r - l) > (b - t)
+            if (isLand != land) {
+                land = isLand
+                screenFrame.post { applyLand() }
+            }
+        }
         column.addView(panel, LinearLayout.LayoutParams(-1, -2))
 
         root.setOnApplyWindowInsetsListener { v, ins ->
@@ -232,10 +249,34 @@ class ScreenActivity : Activity() {
         dragBtn.visibility = if (Prefs.screenControl) View.VISIBLE else View.GONE
     }
 
+    private var land = false
+    private var menuOpen = false
+    private lateinit var menuBtn: KeyButton
+
+    private fun applyLand() {
+        val typing = panel.visibility == View.VISIBLE
+        menuBtn.visibility = if (land && !typing) View.VISIBLE else View.GONE
+        val lp = barScroll.layoutParams as FrameLayout.LayoutParams
+        lp.leftMargin = if (land) dpi(54) else 0
+        barScroll.layoutParams = lp
+        barScroll.visibility = when {
+            typing -> View.GONE
+            land -> if (menuOpen) View.VISIBLE else View.GONE
+            else -> View.VISIBLE
+        }
+        menuBtn.active = if (land && menuOpen) 1 else 0
+    }
+
+    private fun setMenuOpen(open: Boolean) {
+        menuOpen = open
+        applyLand()
+    }
+
     private fun closePanel() {
         input.clearFocus()
         panel.visibility = View.GONE
-        barScroll.visibility = View.VISIBLE
+        menuOpen = false
+        applyLand()
         screen.post { screen.restoreZoom() }
     }
 
@@ -265,7 +306,7 @@ class ScreenActivity : Activity() {
 
     private fun showIme() {
         panel.visibility = View.VISIBLE
-        barScroll.visibility = View.GONE
+        applyLand()
         input.requestFocus()
         input.post {
             getSystemService(android.view.inputmethod.InputMethodManager::class.java)
@@ -412,6 +453,9 @@ class ScreenActivity : Activity() {
 class ScreenView(ctx: Context) : View(ctx) {
     var control = true
 
+    /** 画面に触れたとき (横向きのメニューをしまうため) */
+    var onTouchStart: (() -> Unit)? = null
+
     /** 1本指でなぞったとき: true=カーソル移動 / false=スクロール */
     var dragCursor = false
     private var bmp: Bitmap? = null
@@ -522,6 +566,7 @@ class ScreenView(ctx: Context) : View(ctx) {
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                onTouchStart?.invoke()
                 downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
                 moved = false; multi = false; longPressed = false; dragging = false; scrolling1 = false
                 cursorMoving = false
