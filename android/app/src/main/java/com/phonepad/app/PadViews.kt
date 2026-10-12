@@ -49,7 +49,7 @@ private class Accum {
 }
 
 /** ホイール量 (120で1段) を一定量ごとにまとめて送る */
-private class WheelAccum {
+class WheelAccum {
     var v = 0f
     var h = 0f
     fun add(dv: Float, dh: Float) {

@@ -21,6 +21,7 @@ import android.widget.TextView
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
+import kotlin.math.abs
 import kotlin.math.hypot
 
 /** PCの画面を表示する。触れた場所をクリックすることもできる */
@@ -29,6 +30,9 @@ class ScreenActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var ctrlBtn: KeyButton
     private lateinit var qualityBtn: KeyButton
+    private lateinit var kbBtn: KeyButton
+    private lateinit var input: KeyInputView
+    private var imeShown = false
 
     @Volatile
     private var running = false
@@ -61,6 +65,13 @@ class ScreenActivity : Activity() {
             onTap = {
                 Prefs.screenControl = !Prefs.screenControl
                 refreshButtons()
+                if (Prefs.screenControl) {
+                    android.widget.Toast.makeText(
+                        this@ScreenActivity,
+                        "タップ=クリック　長押し=右クリック　長押しして動かす=ドラッグ\nなぞる・2本指でなぞる=スクロール　2本指で広げる=拡大",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
         bar.addView(ctrlBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
@@ -73,16 +84,49 @@ class ScreenActivity : Activity() {
             }
         }
         bar.addView(qualityBtn, LinearLayout.LayoutParams(-2, dpi(38)).apply { leftMargin = dpi(6) })
+
+        // 文字入力: 画面の下に入力欄を出し、確定した文字をすぐPCへ送る
+        input = KeyInputView(this).apply {
+            applyMode(Prefs.latinOnly)
+            sender = ImeSender(Modifiers {}) {}
+            hint = "入力した文字はすぐPCへ送られます"
+            setHintTextColor(C.SUB)
+            setTextColor(C.INK)
+            textSize = 16f
+            background = rounded(C.BG, dp(10f), C.LINE, dpi(1))
+            setPadding(dpi(12), dpi(10), dpi(12), dpi(10))
+            visibility = View.GONE
+        }
+        kbBtn = KeyButton(this, "⌨", 15f).apply {
+            alpha = 0.85f
+            onTap = { if (imeShown) hideIme() else showIme() }
+        }
+        bar.addView(kbBtn, LinearLayout.LayoutParams(dpi(44), dpi(38)).apply { leftMargin = dpi(6) })
         status = label(this, "", 12f, C.SUB).apply {
             setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
             setPadding(dpi(10), 0, 0, 0)
         }
         bar.addView(status)
         root.addView(bar, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
+        root.addView(input, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
+            setMargins(dpi(8), 0, dpi(8), dpi(6))
+        })
 
         root.setOnApplyWindowInsetsListener { v, ins ->
-            val c = ins.getInsets(WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars())
+            // キーボードが出ているときは、その上に画面を収める
+            val c = ins.getInsets(
+                WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars() or WindowInsets.Type.ime(),
+            )
             v.setPadding(c.left, c.top, c.right, c.bottom)
+            val shown = ins.isVisible(WindowInsets.Type.ime())
+            if (shown != imeShown) {
+                imeShown = shown
+                kbBtn.active = if (shown) 1 else 0
+                if (!shown) {
+                    input.clearFocus()
+                    input.visibility = View.GONE
+                }
+            }
             WindowInsets.CONSUMED
         }
         setContentView(root)
@@ -97,6 +141,22 @@ class ScreenActivity : Activity() {
             0 -> "低"; 2 -> "高"; else -> "標準"
         }
         screen.control = Prefs.screenControl
+    }
+
+    private fun showIme() {
+        input.visibility = View.VISIBLE
+        input.requestFocus()
+        input.post {
+            getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                ?.showSoftInput(input, 0)
+        }
+    }
+
+    private fun hideIme() {
+        getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            ?.hideSoftInputFromWindow(input.windowToken, 0)
+        input.clearFocus()
+        input.visibility = View.GONE
     }
 
     private fun hideBars() {
@@ -223,8 +283,10 @@ class ScreenActivity : Activity() {
 }
 
 /**
- * PC画面の表示。2本指で拡大・移動。
- * 操作ONのとき: タップ=左クリック、長押し=右クリック、長押しして動かす=ドラッグ
+ * PC画面の表示。2本指で広げる/つまむ=拡大縮小。
+ * 操作ONのとき: タップ=左クリック、長押し=右クリック、長押しして動かす=ドラッグ、
+ *   なぞる=スクロール (拡大中は表示の移動)、2本指でなぞる=スクロール、
+ *   2本指タップ=右クリック、3本指タップ=中クリック
  */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
 class ScreenView(ctx: Context) : View(ctx) {
@@ -303,11 +365,20 @@ class ScreenView(ctx: Context) : View(ctx) {
     private var multi = false
     private var longPressed = false
     private var dragging = false
+    private var scrolling1 = false
     private var pinchDist = 0f
     private var pinchZoom = 1f
+    private var startMidX = 0f
+    private var startMidY = 0f
     private var midX = 0f
     private var midY = 0f
     private var lastTapTime = 0L
+    private var downTime = 0L
+    private var maxPointers = 0
+
+    /** 2本指の動き: 未決定 / 拡大縮小 / スクロール */
+    private var twoMode = 0
+    private val wheel = WheelAccum()
 
     private val longPress = Runnable {
         if (!moved && !multi && control) {
@@ -316,45 +387,82 @@ class ScreenView(ctx: Context) : View(ctx) {
         }
     }
 
+    private val zoomed get() = zoom > 1.05f
+
+    private fun scroll(dx: Float, dy: Float) {
+        // 指の動きに中身がついてくる向き (スマホと同じ)
+        val k = 6f * Prefs.scrollSpeed / resources.displayMetrics.density
+        wheel.add(dy * k, -dx * k)
+    }
+
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
-                moved = false; multi = false; longPressed = false; dragging = false
+                moved = false; multi = false; longPressed = false; dragging = false; scrolling1 = false
+                downTime = System.currentTimeMillis()
+                maxPointers = 1
+                wheel.reset()
                 postDelayed(longPress, 450)
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
+                maxPointers = maxOf(maxPointers, e.pointerCount)
                 if (e.pointerCount == 2) {
                     removeCallbacks(longPress)
                     if (dragging) {
                         Link.send("MB L 0"); dragging = false
                     }
                     multi = true
+                    twoMode = 0
+                    wheel.reset()
                     pinchDist = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)).coerceAtLeast(1f)
                     pinchZoom = zoom
                     midX = (e.getX(0) + e.getX(1)) / 2
                     midY = (e.getY(0) + e.getY(1)) / 2
+                    startMidX = midX; startMidY = midY
                 }
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (multi && e.pointerCount >= 2) {
-                    // 2本指: 拡大縮小と移動
                     val d = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
                     val mx = (e.getX(0) + e.getX(1)) / 2
                     val my = (e.getY(0) + e.getY(1)) / 2
-                    val newZoom = (pinchZoom * d / pinchDist).coerceIn(1f, 6f)
-                    // 指の中心を基準に拡大する
-                    val f = newZoom / zoom
-                    panX = (panX - (mx - width / 2f)) * f + (mx - width / 2f) + (mx - midX)
-                    panY = (panY - (my - height / 2f)) * f + (my - height / 2f) + (my - midY)
-                    zoom = newZoom
-                    midX = mx; midY = my
+                    if (twoMode == 0) {
+                        // 指の間隔が変わったら拡大縮小、そろって動いたらスクロール
+                        when {
+                            abs(d - pinchDist) > dp(28f) -> twoMode = 1
+                            control && hypot(mx - startMidX, my - startMidY) > dp(16f) -> {
+                                twoMode = 2
+                                sendMove(startMidX, startMidY)
+                            }
+
+                            !control && hypot(mx - startMidX, my - startMidY) > dp(16f) -> twoMode = 1
+                        }
+                    }
+                    if (twoMode == 1) {
+                        val newZoom = (pinchZoom * d / pinchDist).coerceIn(1f, 6f)
+                        // 指の中心を基準に拡大する
+                        val f = newZoom / zoom
+                        panX = (panX - (mx - width / 2f)) * f + (mx - width / 2f) + (mx - midX)
+                        panY = (panY - (my - height / 2f)) * f + (my - height / 2f) + (my - midY)
+                        zoom = newZoom
+                    } else if (twoMode == 2) {
+                        scroll(mx - midX, my - midY)
+                    }
+                    if (twoMode != 0) {
+                        midX = mx; midY = my
+                    }
                 } else if (!multi) {
                     if (!moved && hypot(e.x - downX, e.y - downY) > slop) {
                         moved = true
                         removeCallbacks(longPress)
+                        // 操作ONで拡大していないとき、1本指でなぞるとスクロール
+                        if (control && !longPressed && !zoomed) {
+                            scrolling1 = true
+                            sendMove(downX, downY)
+                        }
                     }
                     if (control && longPressed) {
                         // 長押ししてから動かす → ドラッグ
@@ -364,6 +472,8 @@ class ScreenView(ctx: Context) : View(ctx) {
                             dragging = true
                         }
                         sendMove(e.x, e.y)
+                    } else if (scrolling1) {
+                        scroll(e.x - lastX, e.y - lastY)
                     } else if (moved) {
                         // 1本指で動かす → 表示の移動 (拡大しているとき)
                         panX += e.x - lastX
@@ -375,8 +485,18 @@ class ScreenView(ctx: Context) : View(ctx) {
 
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPress)
+                val quick = System.currentTimeMillis() - downTime < 300
                 when {
-                    multi -> {}
+                    multi -> {
+                        // 2本指で軽くタップ → 右クリック / 3本指 → 中クリック
+                        if (control && twoMode == 0 && quick) {
+                            if (sendMove(startMidX, startMidY)) {
+                                Link.send(if (maxPointers >= 3) "MC M" else "MC R")
+                                Haptics.tick()
+                            }
+                        }
+                    }
+
                     dragging -> {
                         sendMove(e.x, e.y)
                         Link.send("MB L 0")
@@ -397,7 +517,7 @@ class ScreenView(ctx: Context) : View(ctx) {
                         // 操作OFFのときはダブルタップで拡大/元に戻す
                         val now = System.currentTimeMillis()
                         if (now - lastTapTime < 300) {
-                            if (zoom > 1.05f) {
+                            if (zoomed) {
                                 zoom = 1f; panX = 0f; panY = 0f
                             } else {
                                 zoom = 2.5f
@@ -411,15 +531,23 @@ class ScreenView(ctx: Context) : View(ctx) {
                     }
                 }
                 dragging = false
+                scrolling1 = false
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPress)
                 if (dragging) Link.send("MB L 0")
                 dragging = false
+                scrolling1 = false
             }
         }
         invalidate()
         return true
+    }
+
+    /** 拡大を元に戻す */
+    fun resetZoom() {
+        zoom = 1f; panX = 0f; panY = 0f
+        invalidate()
     }
 }
