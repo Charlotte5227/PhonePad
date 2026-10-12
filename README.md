@@ -12,7 +12,7 @@
 | `pc/` | PC側ソフト（Go、Windows 用） |
 | `pc/bundle/` | 配布 zip に同梱するファイル（ViGEm ドライバー、説明書） |
 | `docs/` | 配布サイト（GitHub Pages） |
-| `.github/workflows/release.yml` | タグを付けると自動でビルドして公開する仕組み |
+| `.github/workflows/release.yml` | CHANGELOG.md を更新すると自動でビルドして公開する仕組み |
 
 ## 新しいバージョンを公開する手順
 

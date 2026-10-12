@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: バージョン
         id: v
@@ -35,7 +35,7 @@ jobs:
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: steps.v.outputs.skip != '1'
         with:
           go-version: "1.24"
@@ -54,7 +54,7 @@ jobs:
             -ldflags "-s -w -H windowsgui -X main.appVersion=${{ steps.v.outputs.ver }}" \
             -o ../out/PhonePad.exe .
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         if: steps.v.outputs.skip != '1'
         with:
           distribution: temurin
@@ -64,9 +64,14 @@ jobs:
         if: steps.v.outputs.skip != '1'
         env:
           KS: ${{ secrets.PHONEPAD_KEYSTORE_BASE64 }}
+          KP: ${{ secrets.PHONEPAD_KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KS" ]; then
-            echo "::error::GitHub の Secrets に PHONEPAD_KEYSTORE_BASE64 が設定されていません"
+            echo "::error::GitHub の Repository secrets に PHONEPAD_KEYSTORE_BASE64 が見つかりません"
+            exit 1
+          fi
+          if [ -z "$KP" ]; then
+            echo "::error::GitHub の Repository secrets に PHONEPAD_KEYSTORE_PASSWORD が見つかりません"
             exit 1
           fi
           printf "%s" "$KS" | tr -d " \r\n" | base64 -d > "$RUNNER_TEMP/release.jks"
