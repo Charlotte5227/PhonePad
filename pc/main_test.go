@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"phonepad/internal/nacl/secretbox"
 )
 
 func TestTurbo(t *testing.T) {
@@ -432,5 +434,190 @@ func TestDeviceListKick(t *testing.T) {
 		case <-deadline:
 			t.Fatal("BYE not received")
 		}
+	}
+}
+
+// ---- ブラウザ版 (WebSocket + 暗号化) ----
+
+type testWS struct {
+	c   net.Conn
+	br  *bufio.Reader
+	key [32]byte
+	tx  uint64
+	rx  uint64
+}
+
+func dialTestWS(t *testing.T, url string, webKey []byte) *testWS {
+	host := strings.TrimPrefix(url, "http://")
+	c, err := net.Dial("tcp", host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := "GET /ws HTTP/1.1\r\nHost: " + host + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: http://" + host + "\r\n\r\n"
+	c.Write([]byte(req))
+	br := bufio.NewReader(c)
+	status, _ := br.ReadString('\n')
+	if !strings.Contains(status, "101") {
+		t.Fatalf("handshake: %q", status)
+	}
+	for {
+		l, _ := br.ReadString('\n')
+		if l == "\r\n" || l == "" {
+			break
+		}
+	}
+	w := &testWS{c: c, br: br}
+	_, hello := w.readFrame(t)
+	if len(hello) != 28 || string(hello[:4]) != "PPW1" {
+		t.Fatalf("hello: %q", hello)
+	}
+	w.key = deriveWebKey(webKey, hello[4:])
+	return w
+}
+
+func (w *testWS) readFrame(t *testing.T) (byte, []byte) {
+	_ = w.c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var h [2]byte
+	if _, err := io.ReadFull(w.br, h[:]); err != nil {
+		return 0, nil
+	}
+	n := int(h[1] & 0x7F)
+	if n == 126 {
+		var b [2]byte
+		io.ReadFull(w.br, b[:])
+		n = int(binary.BigEndian.Uint16(b[:]))
+	} else if n == 127 {
+		var b [8]byte
+		io.ReadFull(w.br, b[:])
+		n = int(binary.BigEndian.Uint64(b[:]))
+	}
+	p := make([]byte, n)
+	io.ReadFull(w.br, p)
+	return h[0] & 0x0F, p
+}
+
+func (w *testWS) send(kind byte, data []byte) {
+	w.tx++
+	box := secretbox.Seal(nil, append([]byte{kind}, data...), wsNonce(dirFromBrowser, w.tx), &w.key)
+	// ブラウザと同じく、マスクを付けて送る
+	frame := []byte{0x82}
+	if len(box) < 126 {
+		frame = append(frame, 0x80|byte(len(box)))
+	} else {
+		frame = append(frame, 0x80|126, byte(len(box)>>8), byte(len(box)))
+	}
+	mask := []byte{1, 2, 3, 4}
+	frame = append(frame, mask...)
+	for i, b := range box {
+		frame = append(frame, b^mask[i%4])
+	}
+	w.c.Write(frame)
+}
+
+func (w *testWS) recv(t *testing.T) (byte, []byte) {
+	op, box := w.readFrame(t)
+	if op == 0 && box == nil {
+		return 0, nil
+	}
+	w.rx++
+	plain, ok := secretbox.Open(nil, box, wsNonce(dirFromPC, w.rx), &w.key)
+	if !ok {
+		t.Fatal("cannot decrypt")
+	}
+	return plain[0], plain[1:]
+}
+
+func TestWebApp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s.loadConfig()
+	ts := httptest.NewServer(s.webMux())
+	defer ts.Close()
+
+	// 画面のファイルが配信される
+	r, err := http.Get(ts.URL + "/")
+	if err != nil || r.StatusCode != 200 {
+		t.Fatalf("index: %v %v", err, r)
+	}
+	body, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	if !strings.Contains(string(body), "PhonePad") {
+		t.Fatal("index content")
+	}
+	if u := s.webURL([]string{"192.168.1.5"}); !strings.HasPrefix(u, "http://192.168.1.5:47806/#") || !strings.HasSuffix(u, "."+s.code()) {
+		t.Fatalf("webURL: %s", u)
+	}
+
+	key := decodeWebKey(s.cfg.WebKey)
+	w := dialTestWS(t, ts.URL, key)
+	w.send('L', []byte("HELLO "+s.code()+" "+base64.StdEncoding.EncodeToString([]byte("iPhone"))+" 2"))
+	k, line := w.recv(t)
+	if k != 'L' || !strings.HasPrefix(string(line), "OK ") {
+		t.Fatalf("hello reply: %c %q", k, line)
+	}
+	w.send('L', []byte("PING"))
+	for i := 0; i < 5; i++ {
+		k, line = w.recv(t)
+		if string(line) == "PONG" {
+			break
+		}
+	}
+	if string(line) != "PONG" {
+		t.Fatalf("no PONG: %q", line)
+	}
+	// 一覧に出る
+	s.mu.Lock()
+	n := len(s.sessions)
+	var name string
+	for ss := range s.sessions {
+		name = ss.deviceName
+	}
+	s.mu.Unlock()
+	if n != 1 || name != "iPhone" {
+		t.Fatalf("sessions: %d %q", n, name)
+	}
+	// 画面
+	w.send('S', []byte("640 45"))
+	for i := 0; i < 5; i++ {
+		k, line = w.recv(t)
+		if k == 'S' {
+			break
+		}
+	}
+	if k != 'S' || len(line) < 500 || line[0] != 0xFF || line[1] != 0xD8 {
+		t.Fatalf("frame: %c %d", k, len(line))
+	}
+	// 通し番号を飛ばした (録画を流し直した) ものは受け付けずに切断する
+	w.tx += 5
+	w.send('L', []byte("PING"))
+	_ = w.c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if op, _ := w.readFrame(t); op == 2 {
+		// 送信中だった返事が届くことはある。その後は切断されていること
+		for {
+			if op, _ = w.readFrame(t); op == 0 {
+				break
+			}
+		}
+	}
+	w.c.Close()
+
+	// 鍵が違うと受け付けない (失敗として数える)
+	bad := make([]byte, 32)
+	w2 := dialTestWS(t, ts.URL, bad)
+	w2.send('L', []byte("HELLO "+s.code()+" eA== 2"))
+	if op, _ := w2.readFrame(t); op != 0 {
+		t.Fatalf("wrong key should be closed, got op %d", op)
+	}
+	w2.c.Close()
+	time.Sleep(50 * time.Millisecond)
+	s.mu.Lock()
+	fails := 0
+	for _, f := range s.fails {
+		fails += len(f)
+	}
+	s.mu.Unlock()
+	if fails == 0 {
+		t.Fatal("wrong key not counted as failure")
 	}
 }

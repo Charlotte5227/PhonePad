@@ -68,22 +68,36 @@ func (s *server) screenMux() *http.ServeMux {
 		if q < 20 || q > 95 {
 			q = 60
 		}
-		img, err := captureScreen(width)
+		b, err := screenJPEG(width, q)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
-		var buf bytes.Buffer
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
-		_, _ = w.Write(buf.Bytes())
+		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		_, _ = w.Write(b)
 	})
 	return mux
+}
+
+// PCの画面を JPEG にする (width: 横幅, q: 画質 20〜95)
+func screenJPEG(width, q int) ([]byte, error) {
+	if width < 320 || width > 2560 {
+		width = 960
+	}
+	if q < 20 || q > 95 {
+		q = 60
+	}
+	img, err := captureScreen(width)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // 画面の配信 (暗号化)

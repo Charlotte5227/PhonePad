@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PhonePad">
+<meta name="theme-color" content="#1B1815">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<title>PhonePad</title>
+<style>
+  :root {
+    --bg: #1B1815; --surface: #26221E; --surface2: #332D27; --line: #4E453C;
+    --ink: #F1EBE4; --sub: #A99D91; --accent: #E0A35A; --accent-ink: #2A1A08;
+    --ok: #6CC28F; --warn: #F0925A; --turbo: #FF6B3D;
+    --st: env(safe-area-inset-top); --sb: env(safe-area-inset-bottom);
+    --sl: env(safe-area-inset-left); --sr: env(safe-area-inset-right);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif;
+    overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body { display: flex; flex-direction: column; overflow: hidden; position: fixed; inset: 0; }
+  button { font: inherit; color: var(--ink); background: var(--surface2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0 10px; min-height: 44px; touch-action: manipulation; }
+  button:active, button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.lock { box-shadow: inset 0 0 0 2px var(--accent-ink); }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- 上の帯 ---- */
+  .top { display: flex; align-items: center; gap: 8px; padding: calc(var(--st) + 6px) calc(var(--sr) + 10px) 6px calc(var(--sl) + 10px); }
+  .status { flex: 1; min-width: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sub); }
+  .status.ok { color: var(--ok); } .status.warn { color: var(--warn); }
+  .top button { min-height: 36px; border-radius: 10px; font-size: 14px; }
+
+  /* ---- 画面 ---- */
+  main { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+  .view { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 0 calc(var(--sr) + 8px) 0 calc(var(--sl) + 8px); }
+  body.full .top, body.full .tabs { display: none; }
+  .tabs { display: flex; gap: 6px; padding: 6px calc(var(--sr) + 8px) calc(var(--sb) + 6px) calc(var(--sl) + 8px); }
+  .tabs button { flex: 1; min-width: 0; min-height: 48px; font-size: 12px; line-height: 1.2; border-radius: 14px; padding: 0 4px; white-space: nowrap; }
+  .tabs button .i { display: block; font-size: 19px; }
+
+  /* キーボード */
+  .card { background: var(--surface); border-radius: 16px; padding: 8px; }
+  .field { font-size: 11px; color: var(--sub); padding: 0 4px 2px; }
+  .mirror { max-height: 92px; overflow: auto; background: rgba(0,0,0,.18); border-radius: 8px; padding: 6px 8px;
+    font-size: 13px; white-space: pre-wrap; word-break: break-all; -webkit-user-select: none; margin-bottom: 6px; }
+  .mirror .caret { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin: 0 -1px; }
+  .mirror .sel { background: rgba(224,163,90,.4); }
+  .typing .mirror { max-height: 60px; }
+  .inrow { display: flex; gap: 6px; }
+  textarea { flex: 1; min-width: 0; resize: none; height: 44px; font: 16px/1.4 inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; -webkit-user-select: text; user-select: text; }
+  textarea::placeholder { color: var(--sub); }
+  .keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 6px; }
+  .keys button { padding: 0; font-size: 14px; min-height: 40px; border-radius: 10px; }
+  .fn { grid-template-columns: repeat(4, 1fr); }
+  .pad { flex: 1; min-height: 120px; margin-top: 8px; background: var(--surface); border-radius: 16px; position: relative;
+    touch-action: none; overflow: hidden; }
+  .pad .lab { position: absolute; left: 0; right: 0; top: 42%; text-align: center; font-weight: 700; font-size: 22px; color: rgba(241,235,228,.25); pointer-events: none; }
+  .pad .half { position: absolute; bottom: 14px; width: 50%; text-align: center; font-size: 13px; color: var(--sub); pointer-events: none; }
+  .pad .divider { position: absolute; left: 50%; top: 62%; bottom: 12px; border-left: 1.5px dashed var(--line); pointer-events: none; }
+  .pad .dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(224,163,90,.33); pointer-events: none; }
+  .btnbar { display: flex; gap: 6px; margin: 8px 0; }
+  .btnbar button { flex: 1; min-height: 64px; font-size: 17px; border-radius: 14px; }
+  .typing .pad, .typing .btnbar { display: none; }
+  .typing .spacer { flex: 1; }
+
+  /* コントローラー・画面 */
+  canvas { display: block; touch-action: none; }
+  #padView { padding: 0; }
+  #padCanvas { position: absolute; top: 0; left: var(--sl); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--sb)); }
+  .rotate { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--sub); padding: 24px; pointer-events: none; }
+  .rotate b { display: block; color: var(--ink); font-size: 20px; margin-bottom: 6px; }
+  .edit { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96%; }
+  .edit button { min-height: 38px; font-size: 13px; background: rgba(51,45,39,.95); }
+  #scrView { padding: 0; background: #000; }
+  #scrCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .scrbar { position: absolute; top: calc(var(--st) + 6px); left: calc(var(--sl) + 6px); right: calc(var(--sr) + 6px); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .scrbar::-webkit-scrollbar { display: none; }
+  .scrbar button { flex: none; min-height: 36px; font-size: 13px; background: rgba(51,45,39,.88); }
+  .scrbar span { flex: none; align-self: center; font-size: 12px; color: var(--sub); text-shadow: 0 0 4px #000; }
+  #scrInput { position: absolute; left: calc(var(--sl) + 8px); right: calc(var(--sr) + 8px); bottom: calc(var(--sb) + 6px); height: 44px; }
+
+  /* その他 */
+  #moreView { display: block; }
+  .scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 24px; }
+  h2 { font-size: 14px; color: var(--accent); margin: 22px 0 8px; }
+  h2:first-child { margin-top: 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > button { flex: 1 1 30%; }
+  .note { color: var(--sub); font-size: 13px; margin: 6px 0 0; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+  .set { margin: 10px 0; }
+  .set label { display: flex; justify-content: space-between; font-size: 14px; }
+  .chk { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 14px; }
+  .chk input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; margin: 0; }
+  .list button { display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 8px 12px; }
+  .stat { display: grid; grid-template-columns: 7em 1fr; gap: 4px 10px; font-size: 14px; }
+  .stat dt { color: var(--sub); } .stat dd { margin: 0; }
+  #clipText { width: 100%; height: 88px; }
+
+  /* ショートカットとヘルプ (下から出る) */
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 10; }
+  .sheet > div { background: var(--surface); width: 100%; max-height: 86%; overflow-y: auto; border-radius: 18px 18px 0 0;
+    padding: 14px calc(var(--sr) + 14px) calc(var(--sb) + 14px) calc(var(--sl) + 14px); -webkit-user-select: text; user-select: text; }
+  .sheet h3 { margin: 0 0 10px; font-size: 17px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid2 button { min-height: 52px; font-size: 14px; }
+  .help h4 { margin: 18px 0 6px; font-size: 15px; color: var(--accent); }
+  .help ul { margin: 0; padding-left: 1.2em; }
+  .help li { margin: 4px 0; font-size: 14px; }
+  .help .why { color: var(--sub); font-size: 13px; }
+  .form { display: grid; gap: 8px; margin-top: 10px; }
+  .form input[type=text] { font: 16px inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .toast { position: fixed; left: 50%; bottom: calc(var(--sb) + 80px); transform: translateX(-50%); background: var(--surface2);
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; max-width: 90%; z-index: 20; }
+
+  /* 接続していないとき */
+  .gate { position: fixed; inset: 0; background: var(--bg); z-index: 30; display: flex; flex-direction: column; justify-content: center;
+    padding: 24px calc(var(--sr) + 24px) 24px calc(var(--sl) + 24px); }
+  .gate h1 { font-size: 30px; margin: 0 0 12px; }
+  .gate p { color: var(--sub); margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate" hidden>
+  <h1>PhonePad</h1>
+  <p id="gateMsg">PCの PhonePad の画面にある「iPhone・ブラウザで使う」のQRコードを、カメラで読み取ってください。</p>
+  <p>このページはQRコードから開いたときだけ使えます。</p>
+</div>
+
+<div class="top">
+  <div class="status" id="status">接続しています…</div>
+  <button id="helpBtn" aria-label="ブラウザ版について">？ ブラウザ版について</button>
+</div>
+
+<main>
+  <!-- キーボードとマウス -->
+  <section class="view" id="kbView">
+    <div class="card" id="kbCard">
+      <div id="mirrorBox" hidden>
+        <div class="field" id="mirrorTitle">PCの入力欄</div>
+        <div class="mirror" id="mirror"></div>
+      </div>
+      <div class="inrow">
+        <textarea id="typer" rows="1" placeholder="ここをタップして入力（すぐPCへ送られます）"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="enter"></textarea>
+        <button id="starBtn" aria-label="ショートカット" style="width:48px">★</button>
+      </div>
+      <div class="keys" id="keys1"></div>
+      <div class="keys" id="keys2"></div>
+      <div class="keys fn" id="fnKeys" hidden></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="pad" id="pad">
+      <div class="lab" id="padLab">マウス</div>
+      <div class="divider"></div>
+      <div class="half" style="left:0">左クリック</div>
+      <div class="half" style="right:0">右クリック</div>
+    </div>
+    <div class="btnbar">
+      <button id="mbL">左</button>
+      <button id="mbM">長押し</button>
+      <button id="mbR">右</button>
+    </div>
+  </section>
+
+  <!-- コントローラー -->
+  <section class="view" id="padView" hidden>
+    <canvas id="padCanvas"></canvas>
+    <div class="rotate" id="rotate" hidden><div><b>スマホを横向きにしてください</b>コントローラーは横向きで使います。<br>（画面の向きのロックを外してください）</div></div>
+    <div class="edit" id="editBar" hidden>
+      <button id="edSmall">小さく</button><button id="edBig">大きく</button><button id="edShape">形</button>
+      <button id="edReset">初期配置</button><button id="edDone" class="on">完了</button>
+    </div>
+  </section>
+
+  <!-- PCの画面 -->
+  <section class="view" id="scrView" hidden>
+    <canvas id="scrCanvas"></canvas>
+    <div class="scrbar">
+      <button id="scrCtrl"></button>
+      <button id="scrQual"></button>
+      <button id="scrDrag"></button>
+      <button id="scrKb">⌨</button>
+      <span id="scrStat"></span>
+    </div>
+    <textarea id="scrInput" hidden placeholder="入力した文字はすぐPCへ送られます"
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+  </section>
+
+  <!-- その他 -->
+  <section class="view scroll" id="moreView" hidden>
+    <h2>音量</h2>
+    <div class="set"><label><span>PCの音量</span><span id="volVal">-</span></label>
+      <input type="range" id="vol" min="0" max="100" value="0"></div>
+    <div class="row"><button id="mute">ミュート</button><button id="listen">🎧 スマホで聞く: OFF</button></div>
+    <p class="note" id="listenNote">「スマホで聞く」はこの画面を開いている間だけ鳴ります。</p>
+    <div class="list" id="devs" style="margin-top:8px"></div>
+    <p class="note" id="volErr"></p>
+
+    <h2>クリップボード</h2>
+    <textarea id="clipText" placeholder="ここに書いた文字をPCへ送れます。PCから受け取った文字もここに出ます。"></textarea>
+    <div class="row" style="margin-top:6px"><button id="clipSend">PCへ送る</button><button id="clipGet">PCから受け取る</button></div>
+    <p class="note">受け取った文字は、上の欄を長押しして「コピー」してください（ブラウザ版では自動でコピーできません）。</p>
+
+    <h2>電源</h2>
+    <div class="row">
+      <button data-pw="LOCK">ロック</button><button data-pw="MONOFF">画面を消す</button><button data-pw="SLEEP">スリープ</button>
+      <button data-pw="RESTART">再起動</button><button data-pw="SHUTDOWN">シャットダウン</button>
+    </div>
+
+    <h2>PCの状態</h2>
+    <dl class="stat" id="sys"><dt>CPU</dt><dd>-</dd></dl>
+
+    <h2>設定（このブラウザに保存）</h2>
+    <div id="settings"></div>
+    <div class="row" style="margin-top:10px"><button id="padReset">コントローラーの配置を初期に戻す</button></div>
+
+    <h2>このページについて</h2>
+    <p class="note" id="aboutVer"></p>
+    <div class="row" style="margin-top:6px"><button id="helpBtn2">ブラウザ版でできること・できないこと</button></div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-v="kbView" class="on"><span class="i">⌨</span>キーボード</button>
+  <button data-v="padView"><span class="i">🎮</span>コントローラー</button>
+  <button data-v="scrView"><span class="i">🖥</span>PCの画面</button>
+  <button data-v="moreView"><span class="i">⚙</span>その他</button>
+</nav>
+
+<div class="sheet" id="starSheet" hidden><div>
+  <h3>★ ショートカット</h3>
+  <div class="grid2" id="starList"></div>
+  <div class="row" style="margin-top:10px"><button id="starEdit">追加・削除</button><button id="starClose">閉じる</button></div>
+  <div id="starForm" hidden>
+    <div class="form">
+      <input type="text" id="sfLabel" placeholder="名前（例: エクスプローラー）">
+      <input type="text" id="sfKeys" placeholder="キー（例: Win+E、Ctrl+Shift+Esc、Alt+F4）">
+      <input type="text" id="sfRun" placeholder="または開くアプリ・サイト（例: https://www.youtube.com）">
+      <div class="row"><button id="sfAdd" class="on">追加</button><button id="sfDefaults">最初の一覧に戻す</button></div>
+      <p class="note">削除するときは、上の一覧のボタンを長押ししてください。</p>
+    </div>
+  </div>
+</div></div>
+
+<div class="sheet" id="helpSheet" hidden><div class="help">
+  <h3>ブラウザ版でできること・できないこと</h3>
+  <p class="note">ブラウザ版は、アプリを入れられない iPhone などのための版です。Android では、アプリ版のほうが快適に使えます。</p>
+
+  <h4>できること</h4>
+  <ul>
+    <li>キーボード（日本語入力も可。Ctrl・Alt・Win・ファンクションキー、PCで入力中の欄の表示とカーソル移動）</li>
+    <li>マウス（トラックパッド。タップ=クリック、2本指=スクロール、長押ししてから動かす=ドラッグ）</li>
+    <li>コントローラー（Xbox 360 コントローラーとして認識、連打、配置・大きさ・形の変更）</li>
+    <li>PCの画面表示と操作（タップ=クリック、なぞる=スクロール、2本指=拡大）</li>
+    <li>★ショートカット、音量・出力先、PCの音をスマホで聞く、クリップボード、電源操作、PCの状態</li>
+    <li>通信の暗号化（アプリ版と同じく、同じWi-Fiの他の人には中身が見えません）</li>
+  </ul>
+
+  <h4>できないこと</h4>
+  <ul>
+    <li>振動（ボタンを押したときの振動、ゲームの振動）<div class="why">iPhone の Safari には、Webページからスマホを振動させる機能がありません。</div></li>
+    <li>スマホからPCの電源を入れる（Wake on LAN）<div class="why">ブラウザからは、そのための特別な通信を送れません。</div></li>
+    <li>同じWi-Fi内のPCを自動で探す<div class="why">PCのIPアドレスが変わると、このページは開けなくなります。そのときはPCの画面のQRコードを読み取り直してください。</div></li>
+    <li>コントローラー配置のプリセット保存、PCのアプリ一覧からの登録<div class="why">ブラウザ版では省いています。配置の変更そのものはできます。</div></li>
+    <li>PCから受け取った文字を自動でコピー<div class="why">ブラウザの安全のための制限です。欄を長押ししてコピーしてください。</div></li>
+  </ul>
+
+  <h4>アプリ版より操作性が落ちるところ</h4>
+  <ul>
+    <li>反応が少し遅れることがあります<div class="why">ブラウザを通すぶん、アプリ版よりわずかに遅れます。速さが大事なゲームではアプリ版（Android）のほうが向いています。</div></li>
+    <li>画面の向きを固定できません<div class="why">コントローラーは横向きで使います。スマホの「画面の向きのロック」を外してください。</div></li>
+    <li>画面が自動で暗くなる・ロックされることがあります<div class="why">ブラウザ版では画面をつけたままにできません。長く使うときは、iPhone の設定 →「画面表示と明るさ」→「自動ロック」を長めにしてください。</div></li>
+    <li>他のアプリに切り替えると切断されます<div class="why">このページに戻ると自動でつなぎ直します。PCの音も、このページを開いている間だけ鳴ります。</div></li>
+    <li>端のほうを触ると、ブラウザの「戻る」やホームに戻る操作が反応することがあります<div class="why">Safari の共有ボタン →「ホーム画面に追加」で開くと、画面が広く使え、誤操作も減ります。</div></li>
+    <li>入力欄の小さなズレ<div class="why">iPhone のキーボードの変換候補や自動修正は、ブラウザ版では一部使えないことがあります。</div></li>
+  </ul>
+
+  <h4>おすすめの使い方</h4>
+  <ul>
+    <li>Safari の共有ボタン（□↑）→「ホーム画面に追加」で、アプリのようにアイコンから開けます。</li>
+    <li>PCの「接続コードを変更」を押すと、このページも使えなくなります。PCの画面のQRコードを読み取り直してください。</li>
+  </ul>
+  <div class="row" style="margin-top:14px"><button id="helpClose" class="on">閉じる</button></div>
+</div></div>
+
+<script src="nacl-fast.min.js"></script>
+<script src="app.js"></script>
+<script src="pad.js"></script>
+<script src="screen.js"></script>
+</body>
+</html>

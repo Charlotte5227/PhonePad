@@ -99,6 +99,13 @@
   details.older summary { cursor: pointer; color: var(--amber); font-weight: 700; }
   .empty { color: var(--sub); }
 
+  .web3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; margin-top: 8px; }
+  .web3 h3 { font-size: 17px; margin: 0 0 8px; }
+  .web3 ul { margin: 0; padding-left: 1.1em; }
+  .web3 li { margin: 0 0 10px; }
+  .web3 li span { display: block; color: var(--sub); font-size: 14px; }
+  .lead2 { max-width: 46em; margin: 0 0 16px; }
+  @media (max-width: 760px) { .web3 { grid-template-columns: 1fr; gap: 18px; } }
   footer { padding: 32px 0 48px; color: var(--sub); font-size: 14px; border-top: 2px solid var(--line); }
 
   @media (max-width: 760px) {
@@ -131,6 +138,7 @@
       </div>
       <div class="ver" id="ver">最新版を確認しています…</div>
       <p class="hint">ダウンロードが始まらないときは、このページを Chrome などのブラウザで開いてください。</p>
+      <p class="hint">iPhone の方は、アプリを入れずに使える<a href="#h-web">ブラウザ版</a>をどうぞ（PCのソフトは必要です）。</p>
     </div>
     <svg class="sketch" viewBox="0 0 640 340" role="img" aria-label="スマホに表示したコントローラー画面の線画">
       <rect class="s" x="12" y="12" width="616" height="316" rx="44"/>
@@ -158,7 +166,7 @@
       <li><b>つなぐ</b><span>アプリの「QRコードで接続」で、PCのブラウザに表示されたQRコードを読み取ります。2回目からは自動でつながります。</span></li>
       <li><b>コントローラーを使う場合</b><span>PCの画面の「ドライバーをインストール」を一度だけ実行してください。キーボードとマウスだけなら不要です。</span></li>
     </ol>
-    <p class="note">動作環境: Windows 10 / 11（64bit）、Android 11 以降。スマホとPCは同じWi-Fiにつないで使います（ダウンロードはどこからでもできます）。新しいバージョンが出ると、アプリとPCのソフトが「更新しますか？」と知らせてくれます。</p>
+    <p class="note">動作環境: Windows 10 / 11（64bit）、Android 11 以降（iPhone はブラウザ版）。スマホとPCは同じWi-Fiにつないで使います（ダウンロードはどこからでもできます）。新しいバージョンが出ると、アプリとPCのソフトが「更新しますか？」と知らせてくれます。</p>
   </section>
 
   <section class="block" aria-labelledby="h-feat">
@@ -173,6 +181,44 @@
       <li><span class="ic">⏻</span><div><b>電源</b><span>ロック・スリープ・シャットダウン。設定すればスマホからPCの電源も入れられます</span></div></li>
       <li><span class="ic">📋</span><div><b>クリップボード</b><span>スマホとPCで、コピーした文字をやり取り</span></div></li>
     </ul>
+  </section>
+
+  <section class="block" aria-labelledby="h-web">
+    <h2 id="h-web">iPhone で使う（ブラウザ版）</h2>
+    <p class="lead2">iPhone にはアプリを入れられないため、Safari で使える「ブラウザ版」を用意しています。PCの PhonePad の画面にある「iPhone・ブラウザで使う」のQRコードを iPhone のカメラで読み取るだけで使えます。Safari の共有ボタン →「ホーム画面に追加」で、アプリのようにアイコンから開けます。Android では、アプリ版のほうが快適です。</p>
+    <div class="web3">
+      <div>
+        <h3>できること</h3>
+        <ul>
+          <li>キーボード<span>日本語入力、Ctrl・Alt・Win・ファンクションキー、PCで入力中の欄の表示</span></li>
+          <li>マウス<span>トラックパッド、2本指スクロール、ドラッグ</span></li>
+          <li>コントローラー<span>Xbox 360 コントローラーとして認識。連打、配置・大きさ・形の変更</span></li>
+          <li>PCの画面の表示と操作</li>
+          <li>★ショートカット、音量、PCの音を聞く、クリップボード、電源操作</li>
+          <li>通信の暗号化</li>
+        </ul>
+      </div>
+      <div>
+        <h3>できないこと</h3>
+        <ul>
+          <li>振動<span>iPhone の Safari には、Webページから振動させる機能がありません</span></li>
+          <li>スマホからPCの電源を入れる<span>ブラウザからは、そのための通信を送れません</span></li>
+          <li>PCを自動で探す<span>PCのIPアドレスが変わったら、QRコードを読み直してください</span></li>
+          <li>配置のプリセット保存、PCのアプリ一覧からの登録</li>
+          <li>受け取った文字の自動コピー<span>欄を長押ししてコピーしてください</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3>アプリ版より劣るところ</h3>
+        <ul>
+          <li>反応がわずかに遅れることがある<span>速さが大事なゲームにはアプリ版が向いています</span></li>
+          <li>画面の向きを固定できない<span>コントローラーは横向きで。向きのロックを外してください</span></li>
+          <li>画面が自動で暗くなる・ロックされる<span>長く使うときは iPhone の「自動ロック」を長めに</span></li>
+          <li>他のアプリに切り替えると切断される<span>戻ると自動でつなぎ直します。PCの音もページを開いている間だけ</span></li>
+          <li>画面の端の操作がブラウザに取られることがある<span>「ホーム画面に追加」で開くと減ります</span></li>
+        </ul>
+      </div>
+    </div>
   </section>
 
   <section class="block" aria-labelledby="h-log">

@@ -114,6 +114,19 @@
     </section>
   </div>
 
+  <section class="card apk" id="webCard">
+    <div class="qr small" id="webQr"></div>
+    <div>
+      <h2 style="margin-top:0">iPhone・ブラウザで使う（アプリなし）</h2>
+      <ol>
+        <li>iPhone のカメラでこのQRコードを読み取ると、Safari で操作画面が開きます。アプリを入れる必要はありません。</li>
+        <li>Safari の共有ボタン →「ホーム画面に追加」で、次からはアイコンから開けます。</li>
+        <li>振動・スマホからPCの電源を入れる機能などは使えません。くわしくは操作画面の「ブラウザ版について」を見てください。Android ではアプリ版がおすすめです。</li>
+      </ol>
+      <p class="url">このQRコードには接続用の鍵が入っています。他の人には見せないでください。</p>
+    </div>
+  </section>
+
   <section class="card apk" id="apkCard">
     <div class="qr small" id="apkQr"></div>
     <div>
@@ -135,7 +148,7 @@
 </main>
 <script src="qrcode.js"></script>
 <script>
-  let lastQR = "", lastSite = null, lastDevs = "";
+  let lastQR = "", lastSite = null, lastDevs = "", lastWeb = null;
   const $ = (id) => document.getElementById(id);
 
   function drawQR(text, el) {
@@ -151,6 +164,11 @@
       const r = await fetch("/api/status", { cache: "no-store" });
       const s = await r.json();
       if (s.qr !== lastQR) { lastQR = s.qr; drawQR(s.qr, "qr"); }
+      if (s.webURL !== lastWeb) {
+        lastWeb = s.webURL;
+        $("webCard").hidden = !s.webURL;
+        if (s.webURL) drawQR(s.webURL, "webQr");
+      }
       if (s.siteURL && s.siteURL !== lastSite) {
         lastSite = s.siteURL;
         drawQR(s.siteURL, "apkQr");

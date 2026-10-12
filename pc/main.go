@@ -38,8 +38,9 @@ const (
 var webFS embed.FS
 
 type config struct {
-	Code string `json:"code"`
-	Port int    `json:"port"`
+	Code   string `json:"code"`
+	Port   int    `json:"port"`
+	WebKey string `json:"webKey"` // ブラウザ版の暗号化の鍵 (QRコードにだけ載せる)
 }
 
 type server struct {
@@ -113,6 +114,7 @@ func main() {
 	go s.runStatusPage()
 	go s.runScreenServer()
 	go s.runAudioServer()
+	go s.runWebApp()
 	initGamepadSystem()
 
 	fmt.Printf(" PC名      : %s\n", s.pcName)
@@ -197,6 +199,9 @@ func (s *server) loadConfig() {
 	}
 	if len(s.cfg.Code) != 6 {
 		s.cfg.Code = randomCode()
+	}
+	if len(decodeWebKey(s.cfg.WebKey)) != 32 {
+		s.cfg.WebKey = newWebKey()
 	}
 	s.saveConfig()
 	if c, fp, err := loadOrCreateCert(dir); err == nil {
@@ -322,6 +327,7 @@ func (s *server) statusMux() *http.ServeMux {
 			"autostart":     autostartEnabled(),
 			"update":        updateStatus(),
 			"siteURL":       siteURL,
+			"webURL":        s.webURL(ips),
 			"background":    background,
 		})
 	})
@@ -332,6 +338,7 @@ func (s *server) statusMux() *http.ServeMux {
 		}
 		s.mu.Lock()
 		s.cfg.Code = randomCode()
+		s.cfg.WebKey = newWebKey() // ブラウザ版の古いQRコードも使えなくする
 		s.saveConfig()
 		// 古いコードでつながっている端末は切断する
 		for ss := range s.sessions {
