@@ -109,13 +109,13 @@
     </section>
   </div>
 
-  <section class="card apk" id="apkCard" hidden>
+  <section class="card apk" id="apkCard">
     <div class="qr small" id="apkQr"></div>
     <div>
       <h2 style="margin-top:0">スマホにアプリを入れる</h2>
       <ol>
-        <li>スマホのカメラでこのQRコードを読み取り、PhonePad.apk をダウンロードします。</li>
-        <li>ダウンロードしたファイルを開き、「この提供元のアプリを許可」をオンにしてインストールします。</li>
+        <li>スマホのカメラでこのQRコードを読み取ると、配布サイトが開きます。</li>
+        <li>「Androidアプリ」を押して PhonePad.apk をダウンロードし、開いてインストールします。「この提供元のアプリを許可」をオンにしてください。</li>
         <li>アプリを開いて「QRコードで接続」を押し、上の大きいQRコードを読み取ります。</li>
       </ol>
       <p class="url" id="apkUrl"></p>
@@ -130,7 +130,7 @@
 </main>
 <script src="qrcode.js"></script>
 <script>
-  let lastQR = "", lastApk = null;
+  let lastQR = "", lastSite = null;
   const $ = (id) => document.getElementById(id);
 
   function drawQR(text, el) {
@@ -146,10 +146,10 @@
       const r = await fetch("/api/status", { cache: "no-store" });
       const s = await r.json();
       if (s.qr !== lastQR) { lastQR = s.qr; drawQR(s.qr, "qr"); }
-      if (s.apkURL !== lastApk) {
-        lastApk = s.apkURL;
-        $("apkCard").hidden = !s.apkURL;
-        if (s.apkURL) { drawQR(s.apkURL, "apkQr"); $("apkUrl").textContent = s.apkURL; }
+      if (s.siteURL && s.siteURL !== lastSite) {
+        lastSite = s.siteURL;
+        drawQR(s.siteURL, "apkQr");
+        $("apkUrl").textContent = s.siteURL;
       }
       $("code").textContent = s.code;
       $("pc").textContent = s.pcName;

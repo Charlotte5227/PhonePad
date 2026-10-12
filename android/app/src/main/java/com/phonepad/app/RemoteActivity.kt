@@ -27,7 +27,7 @@ class RemoteActivity : Activity() {
     /** PCで入力中の欄の内容を定期的に取りに行く */
     private val fieldPoll = object : Runnable {
         override fun run() {
-            if (resumed && Link.state == Link.State.CONNECTED) Link.send("TQ")
+            if (resumed && fieldShown() && Link.state == Link.State.CONNECTED) Link.send("TQ")
             handler.postDelayed(this, 700)
         }
     }
@@ -166,6 +166,7 @@ class RemoteActivity : Activity() {
         buildPad()
 
         setContentView(root)
+        updateFieldVisibility()
         updateStatus()
     }
 
@@ -363,7 +364,21 @@ class RemoteActivity : Activity() {
         bottomBar.visibility = padVis
         imeSpacer.visibility = if (v) View.VISIBLE else View.GONE
         pcField.compact = v
+        updateFieldVisibility()
         if (!v) field.clearFocus()
+    }
+
+    private fun fieldShown() = ::pcField.isInitialized && pcField.visibility == View.VISIBLE
+
+    /** PCの入力欄の表示は、設定により常に、または文字入力中だけ */
+    private fun updateFieldVisibility() {
+        val show = Prefs.fieldAlways || imeVisible
+        val was = fieldShown()
+        pcField.visibility = if (show) View.VISIBLE else View.GONE
+        if (show && !was) {
+            handler.removeCallbacks(quickQuery)
+            handler.post(quickQuery)
+        }
     }
 
     private fun openController() {
@@ -388,6 +403,7 @@ class RemoteActivity : Activity() {
             Toast.makeText(this, "コントローラーを使えません: $msg", Toast.LENGTH_LONG).show()
         }
         Link.onField = { pcField.update(it) }
+        updateFieldVisibility()
         // 新しいバージョンの確認 (アプリを開いている間に1回)
         handler.postDelayed({ if (resumed) Updater.check(this, false) }, 3000)
         Link.onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }

@@ -109,7 +109,6 @@ func main() {
 	}
 	go s.runDiscovery()
 	go s.runStatusPage()
-	go runApkServer()
 	go s.runScreenServer()
 	go s.runAudioServer()
 	initGamepadSystem()
@@ -297,7 +296,6 @@ func (s *server) runStatusPage() {
 			"gamepad":       gamepadStatusText(),
 			"gamepadReady":  gamepadReady(),
 			"driverPresent": driverInstallerPath() != "",
-			"apkURL":        apkURL(ips),
 			"autostart":     autostartEnabled(),
 			"update":        updateStatus(),
 			"siteURL":       siteURL,
@@ -412,50 +410,6 @@ func localOnly(h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
-}
-
-// ---- スマホへのアプリ配布 ----
-// exe と同じフォルダに PhonePad.apk があれば、同じWi-Fiのスマホからダウンロードできるようにする。
-// 公開するのはこの1ファイルだけ。
-
-const apkPort = 47803
-
-func apkPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	p := filepath.Join(filepath.Dir(exe), "PhonePad.apk")
-	if _, err := os.Stat(p); err != nil {
-		return ""
-	}
-	return p
-}
-
-func apkURL(ips []string) string {
-	if apkPath() == "" || len(ips) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("http://%s:%d/PhonePad.apk", ips[0], apkPort)
-}
-
-func runApkServer() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/PhonePad.apk", func(w http.ResponseWriter, r *http.Request) {
-		p := apkPath()
-		if p == "" {
-			http.NotFound(w, r)
-			return
-		}
-		log.Printf("アプリをダウンロード: %s", r.RemoteAddr)
-		w.Header().Set("Content-Type", "application/vnd.android.package-archive")
-		w.Header().Set("Content-Disposition", `attachment; filename="PhonePad.apk"`)
-		http.ServeFile(w, r, p)
-	})
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", apkPort), Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	if err := srv.ListenAndServe(); err != nil {
-		log.Println("アプリ配布を開始できませんでした:", err)
-	}
 }
 
 func driverInstallerPath() string {

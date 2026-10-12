@@ -59,6 +59,11 @@ object Prefs {
         get() = b("latinOnly", false)
         set(v) = sp.edit().putBoolean("latinOnly", v).apply()
 
+    /** PCの入力欄の表示: true=常に / false=文字を入力しているとき(スマホのキーボード表示中)だけ */
+    var fieldAlways: Boolean
+        get() = b("fieldAlways", false)
+        set(v) = sp.edit().putBoolean("fieldAlways", v).apply()
+
     // ---- コントローラー ----
     var turboRate: Int
         get() = i("turboRate", 15)

@@ -43,6 +43,15 @@
   .btn.main small { color: var(--amber-ink); opacity: .75; }
   .btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
   .ver { margin-top: 14px; font-size: 14px; color: var(--sub); }
+  .hint { margin: 6px 0 0; font-size: 13px; color: var(--sub); max-width: 34em; }
+  .inapp { border: 3px solid var(--amber); border-radius: 18px; padding: 14px 18px; margin: 20px 0 0; }
+  .inapp p { margin: 0 0 10px; }
+  .inapp .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .inapp a, .inapp button {
+    font: inherit; font-weight: 700; font-size: 15px; border-radius: 12px; padding: 8px 16px; cursor: pointer;
+    border: 2px solid var(--amber); background: transparent; color: var(--ink); text-decoration: none;
+  }
+  .inapp a { background: var(--amber); color: var(--amber-ink); }
   .sketch { width: 100%; height: auto; }
   .sketch .s { fill: none; stroke: var(--amber); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
   .sketch .t { fill: var(--amber); font: 800 30px "M PLUS Rounded 1c", sans-serif; text-anchor: middle; dominant-baseline: central; }
@@ -101,6 +110,13 @@
 </head>
 <body>
 <main class="wrap">
+  <div class="inapp" id="inapp" hidden>
+    <p><b>このままではダウンロードできないことがあります。</b><br>Discord や LINE などのアプリの中で開いたページからは、ファイルを保存できないことがあります。Chrome で開き直してください。</p>
+    <div class="row">
+      <a id="openChrome" href="https://charlotte5227.github.io/PhonePad/">Chrome で開く</a>
+      <button type="button" id="copyUrl">このページのURLをコピー</button>
+    </div>
+  </div>
   <header class="hero">
     <div>
       <h1>PhonePad</h1>
@@ -110,10 +126,11 @@
           Androidアプリ<small>スマホに入れる PhonePad.apk</small>
         </a>
         <a class="btn" id="dlPc" href="https://github.com/Charlotte5227/PhonePad/releases/latest">
-          Windows用ソフト<small>PCに入れる zip（アプリも同梱）</small>
+          Windows用ソフト<small>PCに入れる PhonePad の zip</small>
         </a>
       </div>
       <div class="ver" id="ver">最新版を確認しています…</div>
+      <p class="hint">ダウンロードが始まらないときは、このページを Chrome などのブラウザで開いてください。</p>
     </div>
     <svg class="sketch" viewBox="0 0 640 340" role="img" aria-label="スマホに表示したコントローラー画面の線画">
       <rect class="s" x="12" y="12" width="616" height="316" rx="44"/>
@@ -137,7 +154,7 @@
     <ol class="steps">
       <li><b>PCにソフトを入れる</b><span>「Windows用ソフト」のzipをダウンロードして展開し、PhonePad.exe を起動します。「WindowsによってPCが保護されました」と出たら「詳細情報」→「実行」を押してください。</span></li>
       <li><b>通信を許可する</b><span>初回だけWindowsの確認が出ます。「プライベート ネットワーク」にチェックを入れて許可してください。</span></li>
-      <li><b>スマホにアプリを入れる</b><span>このページをスマホで開いて「Androidアプリ」をダウンロードし、ファイルを開いてインストールします。「この提供元のアプリを許可」をオンにしてください。</span></li>
+      <li><b>スマホにアプリを入れる</b><span>このページをスマホで開いて「Androidアプリ」をダウンロードし、ファイルを開いてインストールします。「この提供元のアプリを許可」をオンにしてください。PCのブラウザ画面の下にある「スマホにアプリを入れる」のQRコードを読み取ると、このページがスマホで開きます。</span></li>
       <li><b>つなぐ</b><span>アプリの「QRコードで接続」で、PCのブラウザに表示されたQRコードを読み取ります。2回目からは自動でつながります。</span></li>
       <li><b>コントローラーを使う場合</b><span>PCの画面の「ドライバーをインストール」を一度だけ実行してください。キーボードとマウスだけなら不要です。</span></li>
     </ol>
@@ -236,6 +253,23 @@
     }
   }
   load();
+
+  // Discord・LINE などのアプリ内ブラウザでは、ダウンロードできないことが多い
+  (function () {
+    const ua = navigator.userAgent;
+    if (!/Android/i.test(ua)) return;
+    if (!/; wv\)|Discord|Line\/|Instagram|FBAN|FBAV|FB_IAB|Twitter|TikTok|musical_ly|KAKAOTALK/i.test(ua)) return;
+    const url = "https://charlotte5227.github.io/PhonePad/";
+    document.getElementById("inapp").hidden = false;
+    document.getElementById("openChrome").href =
+      "intent://charlotte5227.github.io/PhonePad/#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=" +
+      encodeURIComponent(url) + ";end";
+    const btn = document.getElementById("copyUrl");
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(url); btn.textContent = "コピーしました。Chrome に貼り付けてください"; }
+      catch (e) { prompt("このURLをコピーして Chrome で開いてください", url); }
+    };
+  })();
 </script>
 </body>
 </html>

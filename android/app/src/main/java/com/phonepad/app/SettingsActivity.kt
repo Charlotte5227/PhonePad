@@ -57,6 +57,9 @@ class SettingsActivity : Activity() {
         toggle("英数字専用キーボードにする（英字が確実に1文字ずつ送られます。日本語入力は使えません）", Prefs.latinOnly) {
             Prefs.latinOnly = it
         }
+        toggle("PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ表示）", Prefs.fieldAlways) {
+            Prefs.fieldAlways = it
+        }
 
         section("コントローラー")
         slider("連打の速さ（回/秒）", 5f, 30f, Prefs.turboRate.toFloat(), 0) { Prefs.turboRate = it.roundToInt() }

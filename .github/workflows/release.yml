@@ -91,7 +91,7 @@ jobs:
         if: steps.v.outputs.skip != '1'
         run: |
           mkdir -p pkg/PhonePad
-          cp out/PhonePad.exe out/PhonePad.apk pkg/PhonePad/
+          cp out/PhonePad.exe pkg/PhonePad/
           cp -r pc/bundle/. pkg/PhonePad/
           (cd pkg && zip -r "../out/PhonePad-PC-v${{ steps.v.outputs.ver }}.zip" PhonePad)
 
