@@ -60,8 +60,9 @@ const Pad = (function () {
   const bounds = {};
 
   // 画面の端に少し余白をとる
-  const MX = 12, MY = 10;
-  const CW = () => W - MX * 2, CH = () => H - MY * 2;
+  // iPhone は画面の上の端からなぞると通知センター・コントロールセンターが出るので、上を広めに空ける
+  const MX = 12, MY = IS_IOS ? 34 : 10, MB = IS_IOS ? 14 : 10;
+  const CW = () => W - MX * 2, CH = () => H - MY - MB;
   function layout() {
     const sp = (id) => specs[id];
     const cx = (id) => MX + sp(id)[0] * CW(), cy = (id) => MY + sp(id)[1] * CH(), sc = (id) => sp(id)[2];

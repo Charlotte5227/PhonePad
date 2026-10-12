@@ -2,6 +2,9 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+// iPhone・iPad (画面の端からなぞるとOSの操作が優先されるので、端にボタンを置かない)
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+if (IS_IOS) document.documentElement.classList.add("ios");
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 

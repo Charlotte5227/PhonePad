@@ -77,7 +77,7 @@
   #padCanvas { position: absolute; top: 0; left: var(--sl); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--sb)); }
   .rotate { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--sub); padding: 24px; pointer-events: none; }
   .rotate b { display: block; color: var(--ink); font-size: 20px; margin-bottom: 6px; }
-  .edit { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96%; }
+  .edit { position: absolute; top: calc(var(--st) + 6px); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96%; }
   .edit button { min-height: 38px; font-size: 13px; background: rgba(51,45,39,.95); }
   .edit button.on, .scrbar button.on, .edit button:active, .scrbar button:active { background: var(--accent); color: var(--accent-ink); }
   #scrView { padding: 0; background: #000; }
@@ -91,6 +91,11 @@
   .keyrow button { flex: none; min-width: 46px; min-height: 40px; font-size: 14px; padding: 0 8px; border-radius: 10px; }
   .scrPanel .inrow button { flex: none; }
   .typingScr .scrbar { display: none; }
+  /* iPhone: 上の端からなぞると通知センターなどが出るので、端から離す */
+  .ios .top { padding-top: max(calc(var(--st) + 6px), 18px); }
+  .ios .edit { top: max(calc(var(--st) + 6px), 30px); }
+  .ios .scrArea { margin-top: max(var(--st), 30px); }
+  .ios .scrbar { top: 6px; }
   .scrbar { position: absolute; top: calc(var(--st) + 6px); left: calc(var(--sl) + 6px); right: calc(var(--sr) + 6px); display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
   .scrbar::-webkit-scrollbar { display: none; }
   .scrbar button { flex: none; min-height: 36px; font-size: 13px; background: rgba(51,45,39,.88); }
@@ -308,6 +313,7 @@
     <li>画面の向きを固定できません<div class="why">コントローラーは横向きで使います。スマホの「画面の向きのロック」を外してください。</div></li>
     <li>画面が自動で暗くなる・ロックされることがあります<div class="why">ブラウザ版では画面をつけたままにできません。長く使うときは、iPhone の設定 →「画面表示と明るさ」→「自動ロック」を長めにしてください。</div></li>
     <li>他のアプリに切り替えると切断されます<div class="why">このページに戻ると自動でつなぎ直します。PCの音も、このページを開いている間だけ鳴ります。</div></li>
+    <li>画面の上の端からなぞると、通知センターやコントロールセンターが出ます<div class="why">iPhone の仕組みで、Webページからは止められません。そのためブラウザ版では、ボタンやPCの画面を上の端から少し離して置いています。上の端ぎりぎりから指を動かさないようにしてください。</div></li>
     <li>端のほうを触ると、ブラウザの「戻る」やホームに戻る操作が反応することがあります<div class="why">Safari の共有ボタン →「ホーム画面に追加」で開くと、画面が広く使え、誤操作も減ります。</div></li>
     <li>入力欄の小さなズレ<div class="why">iPhone のキーボードの変換候補や自動修正は、ブラウザ版では一部使えないことがあります。</div></li>
   </ul>
