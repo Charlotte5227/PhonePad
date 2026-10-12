@@ -1,0 +1,14 @@
+# ビルドの生成物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+out/
+pkg/
+pc/dist/
+# 署名の鍵 (絶対に公開しない)
+*.jks
+*.keystore
+*.password

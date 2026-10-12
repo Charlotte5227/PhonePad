@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhonePad — スマホをPCのキーボード・マウス・コントローラーに</title>
+<meta name="description" content="スマホをWindows PCのキーボード、マウス、Xboxコントローラーとして使えるアプリ。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1815;
+    --surface: #26221E;
+    --line: #3A332C;
+    --ink: #F1EBE4;
+    --sub: #A99D91;
+    --amber: #E0A35A;
+    --amber-ink: #2A1A08;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 16px/1.8 "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic UI", sans-serif;
+  }
+  a { color: var(--amber); }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---- 最初の画面 ---- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 40px; align-items: center; padding: 64px 0 56px; }
+  .hero h1 { font-size: clamp(40px, 7vw, 68px); line-height: 1.1; font-weight: 800; margin: 0 0 16px; letter-spacing: .01em; }
+  .hero p.lead { font-size: 18px; color: var(--sub); margin: 0 0 28px; max-width: 30em; }
+  .dl { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; flex-direction: column; justify-content: center;
+    min-width: 200px; padding: 12px 22px; border-radius: 18px; text-decoration: none;
+    border: 3px solid var(--amber); color: var(--ink); font-weight: 700; font-size: 17px; line-height: 1.35;
+  }
+  .btn small { font-weight: 400; font-size: 13px; color: var(--sub); }
+  .btn.main { background: var(--amber); color: var(--amber-ink); }
+  .btn.main small { color: var(--amber-ink); opacity: .75; }
+  .btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+  .ver { margin-top: 14px; font-size: 14px; color: var(--sub); }
+  .sketch { width: 100%; height: auto; }
+  .sketch .s { fill: none; stroke: var(--amber); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+  .sketch .t { fill: var(--amber); font: 800 30px "M PLUS Rounded 1c", sans-serif; text-anchor: middle; dominant-baseline: central; }
+  .sketch .thin { stroke-width: 4; opacity: .55; }
+
+  /* ---- 本文 ---- */
+  section.block { padding: 48px 0; border-top: 2px solid var(--line); }
+  h2 { font-size: 28px; font-weight: 800; margin: 0 0 24px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; max-width: 46em; }
+  ol.steps li { counter-increment: step; position: relative; padding: 0 0 22px 56px; }
+  ol.steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--amber);
+    display: grid; place-items: center; font-weight: 800; color: var(--amber);
+  }
+  ol.steps b { display: block; font-size: 18px; }
+  ol.steps span { color: var(--sub); }
+  ul.feat { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 32px; }
+  ul.feat li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
+  ul.feat .ic { font-size: 24px; line-height: 1.5; }
+  ul.feat b { display: block; }
+  ul.feat span { color: var(--sub); font-size: 15px; }
+  .note { color: var(--sub); font-size: 14px; margin-top: 24px; max-width: 46em; }
+
+  /* ---- 変更履歴 ---- */
+  .timeline { position: relative; margin: 0; padding: 0 0 0 28px; list-style: none; max-width: 52em; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 3px; background: var(--line); border-radius: 2px; }
+  .timeline > li { position: relative; padding-bottom: 32px; }
+  .timeline > li::before {
+    content: ""; position: absolute; left: -28px; top: 9px; width: 17px; height: 17px;
+    border-radius: 50%; background: var(--bg); border: 3px solid var(--line);
+  }
+  .timeline > li.latest::before { border-color: var(--amber); background: var(--amber); }
+  .rel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+  .rel-head h3 { margin: 0; font-size: 21px; font-weight: 800; }
+  .rel-head .date { color: var(--sub); font-size: 14px; }
+  .tag { font-size: 12px; font-weight: 700; color: var(--amber-ink); background: var(--amber); border-radius: 99px; padding: 1px 10px; }
+  .rel-body { color: var(--ink); }
+  .rel-body ul { padding-left: 1.2em; margin: 8px 0; }
+  .rel-body p { margin: 8px 0; }
+  .assets { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; }
+  .assets a { text-decoration: none; border-bottom: 1px solid currentColor; }
+  details.older { margin-top: 8px; }
+  details.older summary { cursor: pointer; color: var(--amber); font-weight: 700; }
+  .empty { color: var(--sub); }
+
+  footer { padding: 32px 0 48px; color: var(--sub); font-size: 14px; border-top: 2px solid var(--line); }
+
+  @media (max-width: 760px) {
+    .hero { grid-template-columns: 1fr; padding-top: 40px; gap: 28px; }
+    .cols, ul.feat { grid-template-columns: 1fr; }
+    .btn { min-width: 0; flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div>
+      <h1>PhonePad</h1>
+      <p class="lead">スマホを、WindowsパソコンのキーボードとマウスとXboxコントローラーにするアプリです。同じWi-Fiにつなぐだけで使えます。</p>
+      <div class="dl">
+        <a class="btn main" id="dlApk" href="https://github.com/Charlotte5227/PhonePad/releases/latest" aria-disabled="false">
+          Androidアプリ<small>スマホに入れる PhonePad.apk</small>
+        </a>
+        <a class="btn" id="dlPc" href="https://github.com/Charlotte5227/PhonePad/releases/latest">
+          Windows用ソフト<small>PCに入れる zip（アプリも同梱）</small>
+        </a>
+      </div>
+      <div class="ver" id="ver">最新版を確認しています…</div>
+    </div>
+    <svg class="sketch" viewBox="0 0 640 340" role="img" aria-label="スマホに表示したコントローラー画面の線画">
+      <rect class="s" x="12" y="12" width="616" height="316" rx="44"/>
+      <circle class="s" cx="150" cy="125" r="56"/>
+      <text class="t" x="150" y="125">L</text>
+      <circle class="s thin" cx="140" cy="250" r="18"/><circle class="s thin" cx="140" cy="300" r="0"/>
+      <path class="s" d="M140 228v44M118 250h44"/>
+      <circle class="s" cx="470" cy="70" r="20"/><circle class="s" cx="430" cy="110" r="20"/>
+      <circle class="s" cx="510" cy="110" r="20"/><circle class="s" cx="470" cy="150" r="20"/>
+      <text class="t" x="510" y="110" style="font-size:20px">A</text>
+      <circle class="s" cx="460" cy="250" r="50"/>
+      <text class="t" x="460" y="250">R</text>
+      <circle class="s thin" cx="290" cy="80" r="16"/><circle class="s thin" cx="350" cy="80" r="16"/>
+      <rect class="s thin" x="270" y="270" width="100" height="36" rx="14"/>
+      <path class="s" d="M42 60c20-26 44-36 70-38M598 60c-20-26-44-36-70-38"/>
+    </svg>
+  </header>
+
+  <section class="block" aria-labelledby="h-start">
+    <h2 id="h-start">はじめての方へ</h2>
+    <ol class="steps">
+      <li><b>PCにソフトを入れる</b><span>「Windows用ソフト」のzipをダウンロードして展開し、PhonePad.exe を起動します。「WindowsによってPCが保護されました」と出たら「詳細情報」→「実行」を押してください。</span></li>
+      <li><b>通信を許可する</b><span>初回だけWindowsの確認が出ます。「プライベート ネットワーク」にチェックを入れて許可してください。</span></li>
+      <li><b>スマホにアプリを入れる</b><span>このページをスマホで開いて「Androidアプリ」をダウンロードし、ファイルを開いてインストールします。「この提供元のアプリを許可」をオンにしてください。</span></li>
+      <li><b>つなぐ</b><span>アプリの「QRコードで接続」で、PCのブラウザに表示されたQRコードを読み取ります。2回目からは自動でつながります。</span></li>
+      <li><b>コントローラーを使う場合</b><span>PCの画面の「ドライバーをインストール」を一度だけ実行してください。キーボードとマウスだけなら不要です。</span></li>
+    </ol>
+    <p class="note">動作環境: Windows 10 / 11（64bit）、Android 11 以降。スマホとPCは同じWi-Fiにつないで使います（ダウンロードはどこからでもできます）。新しいバージョンが出ると、アプリとPCのソフトが「更新しますか？」と知らせてくれます。</p>
+  </section>
+
+  <section class="block" aria-labelledby="h-feat">
+    <h2 id="h-feat">できること</h2>
+    <ul class="feat">
+      <li><span class="ic">⌨</span><div><b>キーボード</b><span>日本語もそのまま入力。PCで入力中の欄を表示して、触れた位置から書き足せます</span></div></li>
+      <li><span class="ic">🖱</span><div><b>マウス</b><span>ノートPCのようなトラックパッドと、触れた所に出るスティック</span></div></li>
+      <li><span class="ic">🎮</span><div><b>コントローラー</b><span>Xbox 360 コントローラーとして認識。連打、振動、配置・形の変更とプリセット</span></div></li>
+      <li><span class="ic">★</span><div><b>ショートカット</b><span>Win+E などのキー操作や、アプリ・サイトの起動を1タップで</span></div></li>
+      <li><span class="ic">🔊</span><div><b>音</b><span>PCの音量・出力先の切り替え。PCの音をスマホで聞くこともできます</span></div></li>
+      <li><span class="ic">🖥</span><div><b>PCの画面</b><span>スマホにPCの画面を映して、触れた所をクリック</span></div></li>
+      <li><span class="ic">⏻</span><div><b>電源</b><span>ロック・スリープ・シャットダウン。設定すればスマホからPCの電源も入れられます</span></div></li>
+      <li><span class="ic">📋</span><div><b>クリップボード</b><span>スマホとPCで、コピーした文字をやり取り</span></div></li>
+    </ul>
+  </section>
+
+  <section class="block" aria-labelledby="h-log">
+    <h2 id="h-log">変更履歴とダウンロード</h2>
+    <ol class="timeline" id="releases"><li class="empty">読み込んでいます…</li></ol>
+  </section>
+</main>
+<footer class="wrap">
+  PhonePad ・ <a href="https://github.com/Charlotte5227/PhonePad">GitHub</a> ・
+  <a href="https://github.com/Charlotte5227/PhonePad/releases">すべてのリリース</a>
+</footer>
+
+<script>
+  const API = "https://api.github.com/repos/Charlotte5227/PhonePad/releases?per_page=50";
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // 変更内容 (Markdown の一部) を表示用にする
+  function renderNotes(md) {
+    const out = [];
+    let list = false;
+    for (const raw of (md || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`(.+?)`/g, "<code>$1</code>");
+      if (/^[-*] /.test(line)) {
+        if (!list) { out.push("<ul>"); list = true; }
+        out.push("<li>" + inline(line.slice(2)) + "</li>");
+        continue;
+      }
+      if (list) { out.push("</ul>"); list = false; }
+      if (!line) continue;
+      if (/^#+ /.test(line)) out.push("<p><b>" + inline(line.replace(/^#+ /, "")) + "</b></p>");
+      else out.push("<p>" + inline(line) + "</p>");
+    }
+    if (list) out.push("</ul>");
+    return out.join("");
+  }
+
+  const assetLabel = (n) =>
+    n.endsWith(".apk") ? "Androidアプリ" : n.endsWith(".zip") ? "Windows用ソフト (zip)" : n.endsWith(".exe") ? "PC用 exe のみ" : n;
+
+  function releaseItem(r, i) {
+    const date = new Date(r.published_at).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" });
+    const assets = r.assets.map((a) => `<a href="${esc(a.browser_download_url)}">${esc(assetLabel(a.name))}</a>`).join("");
+    return `<li class="${i === 0 ? "latest" : ""}">
+      <div class="rel-head"><h3>${esc(r.tag_name)}</h3><span class="date">${date}</span>${i === 0 ? '<span class="tag">最新</span>' : ""}</div>
+      <div class="rel-body">${renderNotes(r.body)}</div>
+      <div class="assets">${assets}</div>
+    </li>`;
+  }
+
+  async function load() {
+    const list = document.getElementById("releases");
+    try {
+      const res = await fetch(API, { headers: { Accept: "application/vnd.github+json" } });
+      if (!res.ok) throw new Error(res.status);
+      const rels = (await res.json()).filter((r) => !r.draft);
+      if (!rels.length) {
+        list.innerHTML = '<li class="empty">まだ公開されたバージョンはありません。</li>';
+        document.getElementById("ver").textContent = "準備中です";
+        return;
+      }
+      const latest = rels[0];
+      const find = (ext) => latest.assets.find((a) => a.name.endsWith(ext));
+      const apk = find(".apk"), zip = find(".zip");
+      if (apk) document.getElementById("dlApk").href = apk.browser_download_url;
+      if (zip) document.getElementById("dlPc").href = zip.browser_download_url;
+      const d = new Date(latest.published_at).toLocaleDateString("ja-JP");
+      document.getElementById("ver").textContent = `最新版 ${latest.tag_name}（${d}）`;
+
+      const recent = rels.slice(0, 5).map(releaseItem).join("");
+      const older = rels.slice(5);
+      list.innerHTML = recent + (older.length
+        ? `<li><details class="older"><summary>過去のバージョン（${older.length}件）を表示</summary><ol class="timeline">${older.map((r) => releaseItem(r, 1)).join("")}</ol></details></li>`
+        : "");
+    } catch (e) {
+      list.innerHTML = '<li class="empty">変更履歴を読み込めませんでした。<a href="https://github.com/Charlotte5227/PhonePad/releases">GitHub のリリースページ</a>から確認できます。</li>';
+      document.getElementById("ver").textContent = "最新版は GitHub のリリースページから入手できます";
+    }
+  }
+  load();
+</script>
+</body>
+</html>
