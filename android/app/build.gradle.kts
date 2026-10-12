@@ -20,7 +20,7 @@ android {
     // 鍵の場所: 環境変数 PHONEPAD_KEYSTORE、なければ android フォルダの PhonePad-release.jks
     fun env(name: String) = System.getenv(name)?.takeIf { it.isNotEmpty() }
     val ksFile = env("PHONEPAD_KEYSTORE")?.let { file(it) } ?: rootProject.file("PhonePad-release.jks")
-    val ksPass = env("PHONEPAD_KEYSTORE_PASSWORD")
+    val ksPass = env("PHONEPAD_KEYSTORE_PASSWORD")?.trim()
         ?: rootProject.file("PhonePad-release.password").takeIf { it.exists() }?.readText()?.trim()
     signingConfigs {
         if (ksFile.exists() && ksPass != null) {

@@ -51,7 +51,7 @@ jobs:
             echo "::error::GitHub の Secrets に PHONEPAD_KEYSTORE_BASE64 が設定されていません"
             exit 1
           fi
-          echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf "%s" "$KS" | tr -d " \r\n" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: アプリの組み立て
         working-directory: android
