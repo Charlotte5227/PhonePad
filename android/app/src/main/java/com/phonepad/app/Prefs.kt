@@ -54,6 +54,14 @@ object Prefs {
         get() = s("padMode", "trackpad")
         set(v) = sp.edit().putString("padMode", v).apply()
 
+    /** マウスの片手操作 (oneHandLeft=true で左手用) */
+    var oneHand: Boolean
+        get() = b("oneHand", false)
+        set(v) = sp.edit().putBoolean("oneHand", v).apply()
+    var oneHandLeft: Boolean
+        get() = b("oneHandLeft", false)
+        set(v) = sp.edit().putBoolean("oneHandLeft", v).apply()
+
     // ---- キーボード ----
     var latinOnly: Boolean
         get() = b("latinOnly", false)

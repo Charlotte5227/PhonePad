@@ -141,21 +141,17 @@ class ShortcutPanel(private val act: Activity) {
             }
         }
         head.addView(editBtn, LinearLayout.LayoutParams(-2, act.dpi(38)))
+        // 閉じるは上に置く (下に置くと、すぐ上の再起動などを押し間違えやすいため)
+        head.addView(KeyButton(act, "✕ 閉じる", 13f).apply {
+            setPadding(act.dpi(14), 0, act.dpi(14), 0)
+            onTap = { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(-2, act.dpi(38)).apply { leftMargin = act.dpi(6) })
         root.addView(head)
         hint = label(act, "", 12f, C.SUB).apply { setPadding(0, act.dpi(4), 0, act.dpi(4)) }
         root.addView(hint)
 
         grid = GridLayout(act).apply { columnCount = 3 }
         root.addView(grid)
-
-        // クリップボード
-        section(root, "クリップボード")
-        val clip = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
-        clip.addView(smallBtn("スマホ → PC") { phoneToPc(false) }, weightLp())
-        clip.addView(smallBtn("PC → スマホ") { Link.send("CQ") }, weightLp())
-        root.addView(clip)
-        root.addView(smallBtn("スマホでコピーした内容をPCに貼り付け") { phoneToPc(true) },
-            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(6) })
 
         // 電源
         section(root, "PC")
@@ -171,8 +167,15 @@ class ShortcutPanel(private val act: Activity) {
         p2.addView(smallBtn("シャットダウン") { power("SHUTDOWN", "PCをシャットダウンしますか？\n保存していない作業は失われます。") }, weightLp())
         root.addView(p2)
 
-        root.addView(KeyButton(act, "閉じる", 15f).apply { onTap = { dialog.dismiss() } },
-            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(14) })
+        // クリップボード
+        section(root, "クリップボード")
+        val clip = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
+        clip.addView(smallBtn("スマホ → PC") { phoneToPc(false) }, weightLp())
+        clip.addView(smallBtn("PC → スマホ") { Link.send("CQ") }, weightLp())
+        root.addView(clip)
+        root.addView(smallBtn("スマホでコピーした内容をPCに貼り付け") { phoneToPc(true) },
+            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(6) })
+
 
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(ScrollView(act).apply { addView(root) })

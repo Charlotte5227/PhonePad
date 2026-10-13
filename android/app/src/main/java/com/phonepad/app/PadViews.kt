@@ -409,3 +409,89 @@ class StickPadView(ctx: Context, private val middle: MiddleState) : View(ctx) {
         kx = dx; ky = dy
     }
 }
+
+/**
+ * 片手用のトラックパッド: 1本指だけで使う
+ * ・なぞる=カーソル移動 ・タップ=左クリック (どこを触っても同じ)
+ * スクロール・右クリック・ドラッグは横のボタンで行う
+ */
+@SuppressLint("ViewConstructor", "ClickableViewAccessibility")
+class OneHandPadView(ctx: Context) : View(ctx) {
+    private val density = resources.displayMetrics.density
+    private val slop = 8 * density
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
+    private var lastX = 0f
+    private var lastY = 0f
+    private var lastT = 0L
+    private var moved = false
+    private var multi = false
+    private var touchX = -1f
+    private var touchY = -1f
+    private val acc = Accum()
+
+    /** 「つかむ」中 (左ボタンを押したまま) の表示用 */
+    var grabbing = false
+        set(v) {
+            field = v; invalidate()
+        }
+
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = C.SURFACE }
+    private val bigText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x40F1EBE4; textSize = dp(22f); textAlign = Paint.Align.CENTER; isFakeBoldText = true
+    }
+    private val subText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = C.SUB; textSize = dp(13f); textAlign = Paint.Align.CENTER
+    }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55E0A35A }
+    private val rect = RectF()
+
+    override fun onDraw(c: Canvas) {
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        c.drawRoundRect(rect, dp(16f), dp(16f), bgPaint)
+        c.drawText(if (grabbing) "つかんでいます" else "マウス（片手）", width / 2f, height * 0.45f, bigText)
+        c.drawText(if (grabbing) "なぞって動かし、「はなす」で離します" else "なぞる=移動　タップ=左クリック", width / 2f, height * 0.45f + dp(28f), subText)
+        if (touchX >= 0) c.drawCircle(touchX, touchY, dp(28f), dotPaint)
+    }
+
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
+                downTime = e.eventTime; lastT = e.eventTime
+                moved = false; multi = false
+                acc.reset()
+            }
+
+            MotionEvent.ACTION_POINTER_DOWN -> multi = true
+
+            MotionEvent.ACTION_MOVE -> {
+                val x = e.getX(0)
+                val y = e.getY(0)
+                if (!moved && hypot(x - downX, y - downY) > slop) moved = true
+                if (moved) {
+                    val dx = x - lastX
+                    val dy = y - lastY
+                    val distDp = hypot(dx, dy) / density
+                    val v = distDp / maxOf(e.eventTime - lastT, 4L).toFloat()
+                    val gain = Prefs.mouseSpeed * (1f + Prefs.mouseAccel * min(v, 3f)) * 1.6f
+                    val (ix, iy) = acc.add(dx / density * gain, dy / density * gain)
+                    if (ix != 0 || iy != 0) Link.send("MM $ix $iy")
+                }
+                lastX = x; lastY = y; lastT = e.eventTime
+            }
+
+            MotionEvent.ACTION_UP -> {
+                if (!moved && !multi && e.eventTime - downTime < 350) {
+                    Link.send("MC L")
+                    Haptics.tick()
+                }
+            }
+        }
+        touchX = if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) -1f else e.x
+        touchY = e.y
+        invalidate()
+        return true
+    }
+}

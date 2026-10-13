@@ -319,6 +319,11 @@ class RemoteActivity : Activity() {
     private fun buildPad() {
         padFrame.removeAllViews()
         bottomBar.removeAllViews()
+        if (Prefs.oneHand) {
+            buildOneHand()
+            return
+        }
+        bottomBar.visibility = if (imeVisible) View.GONE else View.VISIBLE
         val stick = Prefs.padMode == "stick"
         val pad: View = if (stick) StickPadView(this, middle) else TrackpadView(this, middle)
         middle.onChange = { pad.invalidate() }
@@ -333,6 +338,16 @@ class RemoteActivity : Activity() {
         }
         padFrame.addView(modeBtn, FrameLayout.LayoutParams(-2, dpi(36), Gravity.TOP or Gravity.START).apply {
             setMargins(dpi(8), dpi(8), 0, 0)
+        })
+        // 「スティック操作」と反対側に、片手操作への切り替え
+        padFrame.addView(KeyButton(this, "片手操作", 12f).apply {
+            setPadding(dpi(12), 0, dpi(12), 0)
+            onTap = {
+                Prefs.oneHand = true
+                buildPad()
+            }
+        }, FrameLayout.LayoutParams(-2, dpi(36), Gravity.TOP or Gravity.END).apply {
+            setMargins(0, dpi(8), dpi(8), 0)
         })
 
         val mid = KeyButton(this, "長押し", 15f).apply {
@@ -355,13 +370,77 @@ class RemoteActivity : Activity() {
         }
     }
 
+    /**
+     * 片手操作: 1本指で全部できるようにする
+     * 右手用はボタンの列を右 (親指の側) に、左手用は左に置く。
+     * 右手用では「<」(左手用へ) を左寄せ、左手用では「>」(右手用へ) を右寄せにする
+     */
+    private fun buildOneHand() {
+        bottomBar.visibility = View.GONE
+        val left = Prefs.oneHandLeft
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val pad = OneHandPadView(this)
+        val padBox = FrameLayout(this)
+        padBox.addView(pad, FrameLayout.LayoutParams(-1, -1))
+        // 利き手の切り替え
+        padBox.addView(KeyButton(this, if (left) "＞ 右手用" else "＜ 左手用", 13f).apply {
+            setPadding(dpi(12), 0, dpi(12), 0)
+            onTap = {
+                Prefs.oneHandLeft = !left
+                buildPad()
+            }
+        }, FrameLayout.LayoutParams(-2, dpi(38), Gravity.TOP or if (left) Gravity.END else Gravity.START).apply {
+            setMargins(dpi(8), dpi(8), dpi(8), 0)
+        })
+
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun add(v: View, weight: Float) {
+            col.addView(v, LinearLayout.LayoutParams(-1, 0, weight).apply { bottomMargin = dpi(6) })
+        }
+        add(KeyButton(this, "片手をやめる", 12f).apply {
+            onTap = {
+                Prefs.oneHand = false
+                buildPad()
+            }
+        }, 0.7f)
+        add(KeyButton(this, "▲\nスクロール", 13f).apply {
+            repeat = true
+            onTap = { Link.send("MW 120 0") }
+        }, 1.2f)
+        add(KeyButton(this, "▼\nスクロール", 13f).apply {
+            repeat = true
+            onTap = { Link.send("MW -120 0") }
+        }, 1.2f)
+        add(KeyButton(this, "右クリック", 14f).apply { onTap = { Link.send("MC R") } }, 1f)
+        val grab = KeyButton(this, "つかむ", 14f)
+        grab.onTap = {
+            pad.grabbing = !pad.grabbing
+            Link.send("MB L ${if (pad.grabbing) 1 else 0}")
+            grab.text = if (pad.grabbing) "はなす" else "つかむ"
+            grab.active = if (pad.grabbing) 2 else 0
+        }
+        add(grab, 1f)
+        add(KeyButton(this, "左クリック", 16f).apply { onTap = { Link.send("MC L") } }, 1.6f)
+
+        val colLp = LinearLayout.LayoutParams(0, -1, 0.3f)
+        val padLp = LinearLayout.LayoutParams(0, -1, 0.7f)
+        if (left) {
+            row.addView(col, colLp.apply { rightMargin = dpi(6) })
+            row.addView(padBox, padLp)
+        } else {
+            row.addView(padBox, padLp)
+            row.addView(col, colLp.apply { leftMargin = dpi(6) })
+        }
+        padFrame.addView(row, FrameLayout.LayoutParams(-1, -1))
+    }
+
     private fun setImeVisible(v: Boolean) {
         if (v == imeVisible) return
         imeVisible = v
         // 文字入力中はマウス部分を隠す
         val padVis = if (v) View.GONE else View.VISIBLE
         padFrame.visibility = padVis
-        bottomBar.visibility = padVis
+        bottomBar.visibility = if (Prefs.oneHand) View.GONE else padVis
         imeSpacer.visibility = if (v) View.VISIBLE else View.GONE
         pcField.compact = v
         updateFieldVisibility()

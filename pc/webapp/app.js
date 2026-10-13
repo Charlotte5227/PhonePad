@@ -56,7 +56,7 @@ const prefs = Object.assign({
   mouseSpeed: 1.5, mouseAccel: 0.6, scrollSpeed: 1.0, invertTwoFinger: false,
   turboRate: 15, positional: false, floatingSticks: true, fieldAlways: false,
   scrControl: true, scrQuality: 1, scrDragCursor: false, mutePc: false,
-  keyRepeatRate: 16, keyRepeatDelay: 400, scrAutoZoom: true,
+  keyRepeatRate: 16, keyRepeatDelay: 400, scrAutoZoom: true, oneHand: false, oneHandLeft: false,
   bottomGap: SAFARI_VER >= 26 && /iPhone/.test(navigator.userAgent) ? 64 : 0,
 }, load("prefs", {}));
 function savePrefs() { store("prefs", prefs); applyBottomGap(); }
@@ -580,6 +580,7 @@ Views.on("kbView", updateMirrorVisibility);
   };
 
   pad.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return; // 「片手操作」ボタン
     pad.setPointerCapture(e.pointerId);
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size === 1) {
@@ -666,6 +667,82 @@ Views.on("kbView", updateMirrorVisibility);
     middleHeld = false; mid.classList.remove("on"); label();
   };
   mid.addEventListener("pointerup", midUp); mid.addEventListener("pointercancel", midUp);
+})();
+
+// ---- 片手操作 ----
+// 1本指で全部できるようにする。右手用はボタンの列を右 (親指の側) に、左手用は左に置く。
+// 右手用では「＜ 左手用」を左寄せ、左手用では「＞ 右手用」を右寄せにする
+(function oneHand() {
+  const box = $("oneHand"), pad = $("ohPad");
+  let grabbing = false;
+  function apply() {
+    const on = prefs.oneHand;
+    box.hidden = !on;
+    $("pad").hidden = on;
+    document.querySelector("#kbView .btnbar").hidden = on;
+    box.classList.toggle("left", prefs.oneHandLeft);
+    $("ohHand").textContent = prefs.oneHandLeft ? "＞ 右手用" : "＜ 左手用";
+    if (!on && grabbing) setGrab(false);
+  }
+  function setGrab(g) {
+    grabbing = g;
+    Link.send("MB L " + (g ? 1 : 0));
+    $("ohGrab").textContent = g ? "はなす" : "つかむ";
+    $("ohGrab").classList.toggle("on", g);
+    $("ohLab").textContent = g ? "つかんでいます" : "マウス（片手）";
+    $("ohSub").textContent = g ? "なぞって動かし、「はなす」で離します" : "なぞる=移動　タップ=左クリック";
+  }
+  $("ohEnter").onclick = () => { prefs.oneHand = true; savePrefs(); apply(); };
+  $("ohExit").onclick = () => { prefs.oneHand = false; savePrefs(); apply(); };
+  $("ohHand").onclick = () => { prefs.oneHandLeft = !prefs.oneHandLeft; savePrefs(); apply(); };
+  const repeatBtn = (el, fn) => {
+    let t1 = 0, t2 = 0;
+    const stop = () => { clearTimeout(t1); clearInterval(t2); el.classList.remove("on"); };
+    el.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); el.classList.add("on"); fn();
+      t1 = setTimeout(() => { t2 = setInterval(fn, Math.round(1000 / Math.max(2, prefs.keyRepeatRate))); }, prefs.keyRepeatDelay);
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((t) => el.addEventListener(t, stop));
+  };
+  repeatBtn($("ohUp"), () => Link.send("MW 120 0"));
+  repeatBtn($("ohDown"), () => Link.send("MW -120 0"));
+  $("ohRight").onclick = () => Link.send("MC R");
+  $("ohLeft").onclick = () => Link.send("MC L");
+  $("ohGrab").onclick = () => setGrab(!grabbing);
+
+  // 1本指のトラックパッド (タップ=左クリック)
+  let id = null, downX = 0, downY = 0, lastX = 0, lastY = 0, lastT = 0, downT = 0, moved = false, accX = 0, accY = 0;
+  const dot = document.createElement("div");
+  dot.className = "dot"; dot.hidden = true; pad.appendChild(dot);
+  pad.addEventListener("pointerdown", (e) => {
+    if (e.target !== pad && !e.target.classList.contains("lab") && !e.target.classList.contains("ohSub")) return;
+    if (id !== null) return;
+    id = e.pointerId; pad.setPointerCapture(id);
+    downX = lastX = e.clientX; downY = lastY = e.clientY; downT = lastT = e.timeStamp; moved = false; accX = accY = 0;
+  });
+  pad.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id) return;
+    const r = pad.getBoundingClientRect();
+    dot.hidden = false; dot.style.left = (e.clientX - r.left) + "px"; dot.style.top = (e.clientY - r.top) + "px";
+    if (!moved && Math.hypot(e.clientX - downX, e.clientY - downY) > 8) moved = true;
+    if (moved) {
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      const v = Math.hypot(dx, dy) / Math.max(e.timeStamp - lastT, 4);
+      const gain = prefs.mouseSpeed * (1 + prefs.mouseAccel * Math.min(v, 3)) * 1.6;
+      accX += dx * gain; accY += dy * gain;
+      const ix = Math.trunc(accX), iy = Math.trunc(accY);
+      if (ix || iy) { Link.send("MM " + ix + " " + iy); accX -= ix; accY -= iy; }
+    }
+    lastX = e.clientX; lastY = e.clientY; lastT = e.timeStamp;
+  });
+  const up = (e) => {
+    if (e.pointerId !== id) return;
+    id = null; dot.hidden = true;
+    if (e.type === "pointerup" && !moved && e.timeStamp - downT < 350) Link.send("MC L");
+  };
+  pad.addEventListener("pointerup", up);
+  pad.addEventListener("pointercancel", up);
+  apply();
 })();
 
 // ---------------------------------------------------------------- ★ ショートカット
@@ -931,6 +1008,7 @@ const COACH = {
     "「長押し」ボタンを押しながらなぞる=スクロール。何もせず離す=中クリック。",
     "Ctrl・Shift・Alt・Win は、1回押すと次の1キーだけ、2回押すと押しっぱなし（もう1回で解除）。",
     "★ でコピー・貼り付けなどのショートカットや、アプリ・サイトを開けます。",
+    "マウスの右上の「片手操作」で、片手（1本指）だけで使える画面になります。「＜ 左手用」「＞ 右手用」で利き手を切り替えます。",
   ]],
   padView: ["コントローラー", [
     "スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えます。",

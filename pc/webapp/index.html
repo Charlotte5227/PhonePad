@@ -71,7 +71,19 @@
   .pad .dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(224,163,90,.33); pointer-events: none; }
   .btnbar { display: flex; gap: 6px; margin: 8px 0; }
   .btnbar button { flex: 1; min-height: 64px; font-size: 17px; border-radius: 14px; }
-  .typing .pad, .typing .btnbar { display: none; }
+  .typing .pad, .typing .btnbar, .typing .onehand { display: none; }
+  /* 片手操作 */
+  .ohEnter { position: absolute; top: 8px; right: 8px; min-height: 34px; font-size: 12px; }
+  .onehand { flex: 1; min-height: 160px; margin: 8px 0; display: flex; gap: 6px; }
+  .onehand.left { flex-direction: row-reverse; }
+  .ohPad { flex: 7; position: relative; background: var(--surface); border-radius: 16px; touch-action: none; overflow: hidden; }
+  .ohPad .lab { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-weight: 700; font-size: 22px; color: rgba(241,235,228,.25); pointer-events: none; }
+  .ohSub { position: absolute; left: 0; right: 0; top: calc(40% + 34px); text-align: center; font-size: 13px; color: var(--sub); pointer-events: none; }
+  .ohSwitch { position: absolute; top: 8px; left: 8px; min-height: 36px; font-size: 13px; }
+  .onehand.left .ohSwitch { left: auto; right: 8px; }
+  .ohCol { flex: 3; display: flex; flex-direction: column; gap: 6px; }
+  .ohCol button { flex: 1; min-height: 0; font-size: 14px; line-height: 1.2; border-radius: 14px; padding: 0 4px; }
+  .ohPad .dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(224,163,90,.33); pointer-events: none; }
   .typing .spacer { flex: 1; }
 
   /* コントローラー・画面 */
@@ -190,6 +202,22 @@
       <div class="divider"></div>
       <div class="half" style="left:0">左クリック</div>
       <div class="half" style="right:0">右クリック</div>
+      <button class="ohEnter" id="ohEnter">片手操作</button>
+    </div>
+    <div class="onehand" id="oneHand" hidden>
+      <div class="ohPad" id="ohPad">
+        <div class="lab" id="ohLab">マウス（片手）</div>
+        <div class="ohSub" id="ohSub">なぞる=移動　タップ=左クリック</div>
+        <button class="ohSwitch" id="ohHand"></button>
+      </div>
+      <div class="ohCol">
+        <button id="ohExit" style="flex:.7;font-size:12px">片手をやめる</button>
+        <button id="ohUp" style="flex:1.2">▲<br>スクロール</button>
+        <button id="ohDown" style="flex:1.2">▼<br>スクロール</button>
+        <button id="ohRight">右クリック</button>
+        <button id="ohGrab">つかむ</button>
+        <button id="ohLeft" style="flex:1.6;font-size:17px">左クリック</button>
+      </div>
     </div>
     <div class="btnbar">
       <button id="mbL">左</button>
