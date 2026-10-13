@@ -231,7 +231,84 @@ class ControllerView(
         class B(val btn: Any) : Owner()
         class S(val stick: Any) : Owner()
         object D : Owner()
+        class A(var area: Any) : Owner()
     }
+
+    // ---- 自由な形のエリア: 指でなぞって描いた形を、好きなボタンにする (点は割合 0〜1) ----
+    private class Area(val key: String, val pts: FloatArray)
+
+    private val areas = ArrayList<Area>()
+    private val AREA_KEYS = listOf("A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "−", "H", "L3", "R3", "↑", "↓", "←", "→")
+
+    private fun areaBit(k: String): Int = when (k) {
+        "A", "B", "X", "Y" -> faceBit(k[0])
+        "L" -> LB; "R" -> RB; "ZL" -> LT; "ZR" -> RT
+        "+" -> START; "−" -> BACK; "H" -> GUIDE; "L3" -> LTHUMB; "R3" -> RTHUMB
+        "↑" -> UP; "↓" -> DOWN; "←" -> LEFT; "→" -> RIGHT
+        else -> 0
+    }
+
+    private fun ax(u: Float) = contentL + u * contentW
+    private fun ay(v: Float) = contentT + v * contentH
+
+    /** 点が多角形の内側にあるか (交差の数で判定) */
+    private fun inArea(a: Area, x: Float, y: Float): Boolean {
+        var inside = false
+        val p = a.pts
+        var j = p.size - 2
+        var i = 0
+        while (i < p.size) {
+            val xi = ax(p[i]); val yi = ay(p[i + 1]); val xj = ax(p[j]); val yj = ay(p[j + 1])
+            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside
+            j = i
+            i += 2
+        }
+        return inside
+    }
+
+    private fun areaAt(x: Float, y: Float): Int {
+        for (i in areas.indices.reversed()) if (inArea(areas[i], x, y)) return i
+        return -1
+    }
+
+    private fun areaCenter(a: Area): Pair<Float, Float> {
+        var x = 0f
+        var y = 0f
+        var i = 0
+        while (i < a.pts.size) {
+            x += a.pts[i]; y += a.pts[i + 1]; i += 2
+        }
+        val n = a.pts.size / 2
+        return (x / n) to (y / n)
+    }
+
+    private fun areasJson(): String {
+        val arr = org.json.JSONArray()
+        for (a in areas) {
+            val o = org.json.JSONObject().put("k", a.key)
+            val pa = org.json.JSONArray()
+            for (v in a.pts) pa.put(v.toDouble())
+            arr.put(o.put("p", pa))
+        }
+        return arr.toString()
+    }
+
+    private fun loadAreas(json: String) {
+        areas.clear()
+        try {
+            val arr = org.json.JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val k = o.optString("k")
+                val pa = o.optJSONArray("p") ?: continue
+                if (k !in AREA_KEYS || pa.length() < 6) continue
+                areas.add(Area(k, FloatArray(pa.length()) { pa.getDouble(it).toFloat().coerceIn(0f, 1f) }))
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun hiddenId(id: String) = (specs[id]?.getOrNull(4) ?: 0f) > 0.5f
 
     // ---- 部品 ----
     private val bA = Btn("A", 0, Kind.FACE, 'A')
@@ -319,7 +396,7 @@ class ControllerView(
 
     private fun loadLayout() {
         specs.clear()
-        for ((id, d) in DEFAULTS) specs[id] = floatArrayOf(d[0], d[1], 1f, 0f)
+        for ((id, d) in DEFAULTS) specs[id] = floatArrayOf(d[0], d[1], 1f, 0f, 0f)
         for (item in Prefs.padLayout.split(";")) {
             val kv = item.split(":")
             if (kv.size != 2) continue
@@ -328,13 +405,18 @@ class ControllerView(
                 specs[kv[0]] = floatArrayOf(
                     v[0].coerceIn(0f, 1f), v[1].coerceIn(0f, 1f), v[2].coerceIn(0.4f, 2.5f),
                     v.getOrElse(3) { 0f }.coerceIn(0f, 3f),
+                    if (v.getOrElse(4) { 0f } > 0.5f) 1f else 0f,
                 )
             }
         }
+            loadAreas(Prefs.padAreas)
     }
 
     private fun saveLayout() {
-        Prefs.padLayout = specs.entries.joinToString(";") { (id, v) -> "$id:${v[0]},${v[1]},${v[2]},${v.getOrElse(3) { 0f }.toInt()}" }
+        Prefs.padLayout = specs.entries.joinToString(";") { (id, v) ->
+            "$id:${v[0]},${v[1]},${v[2]},${v.getOrElse(3) { 0f }.toInt()},${v.getOrElse(4) { 0f }.toInt()}"
+        }
+        Prefs.padAreas = areasJson()
     }
 
     // ---------------------------------------------------------------- 配置の計算
@@ -427,22 +509,25 @@ class ControllerView(
         var best: Btn? = null
         var bestD = Float.MAX_VALUE
         for (b in circles) {
+            if (hiddenId(b.id)) continue
             val d = b.hit(x, y, 1.3f) ?: continue
             if (d < bestD) {
                 bestD = d; best = b
             }
         }
         if (best != null) return Owner.B(best)
-        for (b in rects) if (b.hit(x, y, 1f) != null) return Owner.B(b)
-        if (hypot(x - dcx, y - dcy) < dOff + dR * 1.9f) return Owner.D
+        for (b in rects) if (!hiddenId(b.id) && b.hit(x, y, 1f) != null) return Owner.B(b)
+        if (!hiddenId("DP") && hypot(x - dcx, y - dcy) < dOff + dR * 1.9f) return Owner.D
+        val ai = areaAt(x, y)
+        if (ai >= 0) return Owner.A(areas[ai])
         // スティック: 「触れた位置に出す」ときは周りの広い範囲で反応する
         val zone = if (floatingSticks) 2.1f else 1.5f
-        val dl = hypot(x - sL.homeX, y - sL.homeY) / sL.r
-        val dr = hypot(x - sR.homeX, y - sR.homeY) / sR.r
+        val dl = if (hiddenId("LS")) Float.MAX_VALUE else hypot(x - sL.homeX, y - sL.homeY) / sL.r
+        val dr = if (hiddenId("RS")) Float.MAX_VALUE else hypot(x - sR.homeX, y - sR.homeY) / sR.r
         if (dl < zone && dl <= dr) return Owner.S(sL)
         if (dr < zone) return Owner.S(sR)
         // ABXYの周辺は一番近いボタンにする (押し間違いを減らす)
-        if (hypot(x - faceCx, y - faceCy) < faceOff + bA.r * 1.8f) {
+        if (!hiddenId("FACE") && hypot(x - faceCx, y - faceCy) < faceOff + bA.r * 1.8f) {
             return Owner.B(faces.minBy { hypot(x - it.cx, y - it.cy) })
         }
         return null
@@ -472,6 +557,8 @@ class ControllerView(
             if (o is Owner.B) {
                 val b = o.btn as Btn
                 if (b.kind == Kind.NORMAL || b.kind == Kind.FACE || b.kind == Kind.SHOULDER) m = m or b.bit
+            } else if (o is Owner.A) {
+                m = m or areaBit((o.area as Area).key)
             }
         }
         return m
@@ -507,6 +594,8 @@ class ControllerView(
                         val b = o.btn as Btn
                         if (b.kind == Kind.TURBO) turboPressed() else Haptics.tick()
                     }
+
+                    is Owner.A -> Haptics.tick()
                 }
             }
 
@@ -523,6 +612,17 @@ class ControllerView(
                             if (nd != dpadBits) {
                                 dpadBits = nd
                                 if (nd != 0) Haptics.tick()
+                            }
+                        }
+
+                        is Owner.A -> {
+                            // エリアからエリアへ指を滑らせられる
+                            if (!inArea(o.area as Area, x, y)) {
+                                val ai = areaAt(x, y)
+                                if (ai >= 0) {
+                                    o.area = areas[ai]
+                                    Haptics.tick()
+                                }
                             }
                         }
 
@@ -550,6 +650,7 @@ class ControllerView(
                     when (o) {
                         is Owner.S -> (o.stick as Stick).end()
                         is Owner.D -> dpadBits = 0
+                        is Owner.A -> {}
                         is Owner.B -> {
                             val b = o.btn as Btn
                             if (!cancel && b.hit(e.getX(i), e.getY(i), 1.3f) != null) {
@@ -622,6 +723,20 @@ class ControllerView(
     private val tbDone = RectF()
     private val tbShape = RectF()
     private val tbPreset = RectF()
+    private val tbHide = RectF()
+    private val tbArea = RectF()
+
+    // エリアを描いている途中
+    private var drawingKey: String? = null
+    private var drawPts: ArrayList<Float>? = null
+    private var areaLastX = 0f
+    private var areaLastY = 0f
+
+    private fun selArea(): Area? {
+        val id = selected ?: return null
+        if (!id.startsWith("AREA:")) return null
+        return areas.getOrNull(id.removePrefix("AREA:").toIntOrNull() ?: -1)
+    }
 
     private fun startEditing() {
         releaseAll()
@@ -635,6 +750,8 @@ class ControllerView(
     fun finishEditing() {
         if (!editing) return
         editing = false
+        drawingKey = null
+        drawPts = null
         selected = null
         dragging = false
         pinching = false
@@ -645,10 +762,10 @@ class ControllerView(
     private fun layoutToolbar() {
         val W = contentW
         val H = contentH
-        val bw = W * 0.115f
+        val bw = W * 0.104f
         val bh = H * 0.11f
-        val gap = W * 0.01f
-        val bars = listOf(tbSmaller, tbBigger, tbShape, tbPreset, tbReset, tbDone)
+        val gap = W * 0.008f
+        val bars = listOf(tbSmaller, tbBigger, tbShape, tbHide, tbArea, tbPreset, tbReset, tbDone)
         val total = bw * bars.size + gap * (bars.size - 1)
         var x = contentL + (W - total) / 2
         val y = contentT + H * 0.02f
@@ -667,16 +784,67 @@ class ControllerView(
             Toast.makeText(context, "先に部品に触れて選んでください", Toast.LENGTH_SHORT).show()
             return
         }
+        if (id.startsWith("AREA:")) {
+            Toast.makeText(context, "エリアの形は、消してから描き直してください", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (id == "LS" || id == "RS") {
             Toast.makeText(context, "スティックは丸のままです", Toast.LENGTH_SHORT).show()
             return
         }
         val v = specs[id] ?: return
         val next = ((v.getOrElse(3) { 0f }.toInt() + 1) % 4)
-        specs[id] = floatArrayOf(v[0], v[1], v[2], next.toFloat())
+        specs[id] = floatArrayOf(v[0], v[1], v[2], next.toFloat(), v.getOrElse(4) { 0f })
         saveLayout()
         Haptics.tick()
         Toast.makeText(context, "形: ${SHAPE_NAMES[next]}", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 部品を隠す・表示に戻す (エリアを選んでいるときは消す) */
+    private fun toggleHide() {
+        val id = selected
+        if (id == null) {
+            Toast.makeText(context, "隠す部品（または消すエリア）を選んでください", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val a = selArea()
+        if (a != null) {
+            android.app.AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("このエリア（${a.key}）を消しますか？")
+                .setPositiveButton("消す") { _, _ ->
+                    areas.remove(a)
+                    selected = null
+                    saveLayout()
+                    invalidate()
+                }
+                .setNegativeButton("キャンセル", null)
+                .show()
+            return
+        }
+        if (id == "EDIT" || id == "SWITCH") {
+            Toast.makeText(context, "配置（✎）と切替（⌨）は隠せません", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val v = specs[id] ?: return
+        val hide = (v.getOrElse(4) { 0f }) < 0.5f
+        specs[id] = floatArrayOf(v[0], v[1], v[2], v.getOrElse(3) { 0f }, if (hide) 1f else 0f)
+        saveLayout()
+        Haptics.tick()
+        Toast.makeText(context, if (hide) "隠しました（使うときは見えません）" else "表示に戻しました", Toast.LENGTH_SHORT).show()
+    }
+
+    /** ボタンを選んでから、指でなぞってエリアを描く */
+    private fun pickAreaKey() {
+        android.app.AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("どのボタンのエリアを描きますか？")
+            .setItems(AREA_KEYS.toTypedArray()) { _, i ->
+                drawingKey = AREA_KEYS[i]
+                selected = null
+                Toast.makeText(context, "「${AREA_KEYS[i]}」にしたい場所を、指でなぞって囲んでください", Toast.LENGTH_LONG).show()
+                invalidate()
+            }
+            .setNegativeButton("やめる", null)
+            .show()
     }
 
     /** 配置のプリセット (保存・読み込み・削除) */
@@ -694,7 +862,15 @@ class ControllerView(
             b.setMessage("まだ保存されていません。「今の配置を保存」で、今の配置・大きさ・形を保存できます。")
         } else {
             b.setItems(names.toTypedArray()) { _, i ->
-                Prefs.padLayout = obj.optString(names[i])
+                // 新しい形式: {"l": 配置, "a": エリア}。前の形式は配置だけ
+                val raw = obj.optString(names[i])
+                val po = try {
+                    org.json.JSONObject(raw)
+                } catch (_: Exception) {
+                    null
+                }
+                Prefs.padLayout = po?.optString("l") ?: raw
+                Prefs.padAreas = po?.optString("a", "[]") ?: "[]"
                 loadLayout(); layoutParts()
                 selected = null
                 invalidate()
@@ -712,7 +888,7 @@ class ControllerView(
                 .setView(box)
                 .setPositiveButton("保存") { _, _ ->
                     val name = et.text.toString().trim().ifEmpty { "プリセット${names.size + 1}" }
-                    obj.put(name, Prefs.padLayout)
+                    obj.put(name, org.json.JSONObject().put("l", Prefs.padLayout).put("a", Prefs.padAreas).toString())
                     Prefs.padPresets = obj.toString()
                     Toast.makeText(context, "「$name」として保存しました", Toast.LENGTH_SHORT).show()
                 }
@@ -736,6 +912,17 @@ class ControllerView(
     }
 
     private fun scaleSelected(f: Float) {
+        selArea()?.let { a ->
+            val (cx, cy) = areaCenter(a)
+            var i = 0
+            while (i < a.pts.size) {
+                a.pts[i] = (cx + (a.pts[i] - cx) * f).coerceIn(0f, 1f)
+                a.pts[i + 1] = (cy + (a.pts[i + 1] - cy) * f).coerceIn(0f, 1f)
+                i += 2
+            }
+            saveLayout()
+            return
+        }
         val id = selected ?: return
         val v = specs[id] ?: return
         v[2] = (v[2] * f).coerceIn(0.4f, 2.5f)
@@ -766,8 +953,17 @@ class ControllerView(
                         Haptics.tick(); post { showPresets() }; return
                     }
 
+                    tbHide.contains(x, y) -> {
+                        post { toggleHide() }; return
+                    }
+
+                    tbArea.contains(x, y) -> {
+                        Haptics.tick(); post { pickAreaKey() }; return
+                    }
+
                     tbReset.contains(x, y) -> {
                         Prefs.padLayout = ""
+                        Prefs.padAreas = "[]"
                         loadLayout(); layoutParts()
                         selected = null
                         Haptics.click()
@@ -779,12 +975,25 @@ class ControllerView(
                         Haptics.click(); finishEditing(); return
                     }
                 }
-                // 指の下にある一番小さい部品を選ぶ
-                val id = editBounds.entries
+                // エリアを描く
+                if (drawingKey != null) {
+                    drawPts = arrayListOf(x, y)
+                    return
+                }
+                // 指の下にある一番小さい部品を選ぶ (なければエリア)
+                var id = editBounds.entries
                     .filter { it.value.contains(x, y) }
                     .minByOrNull { it.value.width() * it.value.height() }?.key
+                if (id == null) {
+                    val ai = areaAt(x, y)
+                    if (ai >= 0) id = "AREA:$ai"
+                }
                 selected = id
-                if (id != null) {
+                if (id != null && id.startsWith("AREA:")) {
+                    areaLastX = x; areaLastY = y
+                    dragging = true
+                    Haptics.tick()
+                } else if (id != null) {
                     val v = specs[id]!!
                     dragDx = x - (contentL + v[0] * contentW)
                     dragDy = y - (contentT + v[1] * contentH)
@@ -794,15 +1003,40 @@ class ControllerView(
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                if (selected != null && e.pointerCount >= 2) {
+                if (selected != null && e.pointerCount >= 2 && drawPts == null) {
                     pinchStartDist = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)).coerceAtLeast(1f)
-                    pinchStartScale = specs[selected!!]!![2]
+                    pinchStartScale = specs[selected!!]?.get(2) ?: 1f
                     pinching = true
                     dragging = false
                 }
             }
 
             MotionEvent.ACTION_MOVE -> {
+                drawPts?.let { p ->
+                    val n = p.size
+                    if (hypot(e.x - p[n - 2], e.y - p[n - 1]) >= dp(5f) && n < 1200) {
+                        p.add(e.x); p.add(e.y)
+                    }
+                    return
+                }
+                selArea()?.let { a ->
+                    if (pinching && e.pointerCount >= 2) {
+                        val d = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
+                        scaleSelected(d / pinchStartDist)
+                        pinchStartDist = d
+                    } else if (dragging) {
+                        val du = (e.x - areaLastX) / contentW
+                        val dv = (e.y - areaLastY) / contentH
+                        var i = 0
+                        while (i < a.pts.size) {
+                            a.pts[i] = (a.pts[i] + du).coerceIn(0f, 1f)
+                            a.pts[i + 1] = (a.pts[i + 1] + dv).coerceIn(0f, 1f)
+                            i += 2
+                        }
+                        areaLastX = e.x; areaLastY = e.y
+                    }
+                    return
+                }
                 val id = selected ?: return
                 val v = specs[id] ?: return
                 if (pinching && e.pointerCount >= 2) {
@@ -825,6 +1059,35 @@ class ControllerView(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 pinching = false
                 dragging = false
+                val p = drawPts
+                val key = drawingKey
+                if (p != null && key != null) {
+                    drawPts = null
+                    // 描き終わり: 小さすぎなければエリアにする
+                    var a2 = 0f
+                    var j = p.size - 2
+                    var i = 0
+                    while (i < p.size) {
+                        a2 += p[j] * p[i + 1] - p[i] * p[j + 1]
+                        j = i; i += 2
+                    }
+                    if (p.size < 8 || kotlin.math.abs(a2) / 2 < dp(30f) * dp(30f)) {
+                        Toast.makeText(context, "小さすぎます。もう少し大きく囲んでください", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+                    val pts = FloatArray(p.size)
+                    i = 0
+                    while (i < p.size) {
+                        pts[i] = ((p[i] - contentL) / contentW).coerceIn(0f, 1f)
+                        pts[i + 1] = ((p[i + 1] - contentT) / contentH).coerceIn(0f, 1f)
+                        i += 2
+                    }
+                    areas.add(Area(key, pts))
+                    selected = "AREA:${areas.size - 1}"
+                    drawingKey = null
+                    Haptics.click()
+                    Toast.makeText(context, "「$key」のエリアを作りました", Toast.LENGTH_SHORT).show()
+                }
                 saveLayout()
             }
         }
@@ -921,47 +1184,106 @@ class ControllerView(
         drawLabel(c, s.label, s.cx + s.kx, s.cy + s.ky, kr * 0.7f, if (pressedBit) C.ACCENT_INK else C.ACCENT)
     }
 
+    private val pArea = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val areaPath = android.graphics.Path()
+
+    private fun drawAreas(c: Canvas) {
+        for ((i, a) in areas.withIndex()) {
+            val on = owners.values.any { it is Owner.A && it.area === a }
+            areaPath.reset()
+            var k = 0
+            while (k < a.pts.size) {
+                if (k == 0) areaPath.moveTo(ax(a.pts[k]), ay(a.pts[k + 1])) else areaPath.lineTo(ax(a.pts[k]), ay(a.pts[k + 1]))
+                k += 2
+            }
+            areaPath.close()
+            pArea.style = Paint.Style.FILL
+            pArea.color = C.ACCENT
+            pArea.alpha = if (on) 140 else 32
+            c.drawPath(areaPath, pArea)
+            val sel = editing && selected == "AREA:$i"
+            pArea.style = Paint.Style.STROKE
+            pArea.alpha = 255
+            pArea.color = if (sel) C.INK else C.ACCENT
+            pArea.strokeWidth = dp(if (sel) 3f else 2f)
+            c.drawPath(areaPath, pArea)
+            val (cu, cv) = areaCenter(a)
+            drawLabel(c, a.key, ax(cu), ay(cv), minOf(contentH * 0.09f, dp(30f)), if (on) C.ACCENT_INK else C.ACCENT)
+        }
+        drawPts?.let { p ->
+            if (p.size >= 4) {
+                areaPath.reset()
+                areaPath.moveTo(p[0], p[1])
+                var k = 2
+                while (k < p.size) {
+                    areaPath.lineTo(p[k], p[k + 1]); k += 2
+                }
+                pArea.style = Paint.Style.STROKE
+                pArea.color = C.INK
+                pArea.strokeWidth = dp(3f)
+                c.drawPath(areaPath, pArea)
+            }
+        }
+    }
+
+    /** 隠した部品は描かない (配置の編集中だけ薄く描く) */
+    private inline fun part(c: Canvas, id: String, block: () -> Unit) {
+        if (!hiddenId(id)) {
+            block(); return
+        }
+        if (!editing) return
+        val save = c.saveLayerAlpha(null, 70)
+        block()
+        c.restoreToCount(save)
+    }
+
     override fun onDraw(c: Canvas) {
         c.drawColor(C.BG)
         val h = contentH
 
-        drawRectBtn(c, bZL, pressed(bZL), h * 0.07f)
-        drawRectBtn(c, bL, pressed(bL), h * 0.07f)
-        drawRectBtn(c, bZR, pressed(bZR), h * 0.07f)
-        drawRectBtn(c, bR, pressed(bR), h * 0.07f)
+        drawAreas(c)
 
-        drawStick(c, sL, pressed(bL3))
-        drawStick(c, sR, pressed(bR3))
+        part(c, "ZL") { drawRectBtn(c, bZL, pressed(bZL), h * 0.07f) }
+        part(c, "L") { drawRectBtn(c, bL, pressed(bL), h * 0.07f) }
+        part(c, "ZR") { drawRectBtn(c, bZR, pressed(bZR), h * 0.07f) }
+        part(c, "R") { drawRectBtn(c, bR, pressed(bR), h * 0.07f) }
+
+        part(c, "LS") { drawStick(c, sL, pressed(bL3)) }
+        part(c, "RS") { drawStick(c, sR, pressed(bR3)) }
 
         // 十字キー
         val dirs = listOf(
             Triple(UP, 0f to -1f, "↑"), Triple(DOWN, 0f to 1f, "↓"),
             Triple(LEFT, -1f to 0f, "←"), Triple(RIGHT, 1f to 0f, "→"),
         )
-        for ((bit, off, lab) in dirs) {
-            val tmp = Btn(lab, bit).apply {
-                id = "DP"
-                cx = dcx + off.first * dOff; cy = dcy + off.second * dOff; r = dR
+        part(c, "DP") {
+            for ((bit, off, lab) in dirs) {
+                val tmp = Btn(lab, bit).apply {
+                    id = "DP"
+                    cx = dcx + off.first * dOff; cy = dcy + off.second * dOff; r = dR
+                }
+                drawCircleBtn(c, tmp, dpadBits and bit != 0, lab, 1.1f)
             }
-            drawCircleBtn(c, tmp, dpadBits and bit != 0, lab, 1.1f)
         }
 
-        faces.forEach { drawCircleBtn(c, it, pressed(it)) }
-        drawCircleBtn(c, bMinus, pressed(bMinus), "−", 1.1f)
-        drawCircleBtn(c, bPlus, pressed(bPlus), "+", 1.1f)
-        drawCircleBtn(c, bHome, pressed(bHome))
-        drawCircleBtn(c, bL3, pressed(bL3), "L3", 0.7f)
-        drawCircleBtn(c, bR3, pressed(bR3), "R3", 0.7f)
+        part(c, "FACE") { faces.forEach { drawCircleBtn(c, it, pressed(it)) } }
+        part(c, "MINUS") { drawCircleBtn(c, bMinus, pressed(bMinus), "−", 1.1f) }
+        part(c, "PLUS") { drawCircleBtn(c, bPlus, pressed(bPlus), "+", 1.1f) }
+        part(c, "H") { drawCircleBtn(c, bHome, pressed(bHome)) }
+        part(c, "L3") { drawCircleBtn(c, bL3, pressed(bL3), "L3", 0.7f) }
+        part(c, "R3") { drawCircleBtn(c, bR3, pressed(bR3), "R3", 0.7f) }
 
         // T (全体ターボ中はオレンジ)
-        pStroke.strokeWidth = dp(3f)
-        pFill.color = if (globalTurbo) C.TURBO else if (pressed(bTurbo)) C.ACCENT else C.SURFACE
-        tmpRect.set(bTurbo.cx - bTurbo.r, bTurbo.cy - bTurbo.r, bTurbo.cx + bTurbo.r, bTurbo.cy + bTurbo.r)
-        drawShape(c, "T", tmpRect, true, pFill)
-        drawShape(c, "T", tmpRect, true, pStroke)
-        drawLabel(c, "T", bTurbo.cx, bTurbo.cy, bTurbo.r * 0.9f, if (globalTurbo) C.ACCENT_INK else C.ACCENT)
+        part(c, "T") {
+            pStroke.strokeWidth = dp(3f)
+            pFill.color = if (globalTurbo) C.TURBO else if (pressed(bTurbo)) C.ACCENT else C.SURFACE
+            tmpRect.set(bTurbo.cx - bTurbo.r, bTurbo.cy - bTurbo.r, bTurbo.cx + bTurbo.r, bTurbo.cy + bTurbo.r)
+            drawShape(c, "T", tmpRect, true, pFill)
+            drawShape(c, "T", tmpRect, true, pStroke)
+            drawLabel(c, "T", bTurbo.cx, bTurbo.cy, bTurbo.r * 0.9f, if (globalTurbo) C.ACCENT_INK else C.ACCENT)
+        }
 
-        drawCircleBtn(c, bGear, pressed(bGear), "⚙", 1.0f)
+        part(c, "GEAR") { drawCircleBtn(c, bGear, pressed(bGear), "⚙", 1.0f) }
         drawCircleBtn(c, bEdit, pressed(bEdit), "✎", 1.0f)
         drawRectBtn(c, bSwitch, pressed(bSwitch), h * 0.09f)
 
@@ -996,23 +1318,33 @@ class ControllerView(
             pDash.strokeWidth = if (sel) dp(3f) else dp(1.5f)
             c.drawRoundRect(r, dp(8f), dp(8f), pDash)
             if (sel) {
-                drawLabel(c, NAMES[id] ?: id, r.centerX(), r.top - dp(12f), dp(14f), C.ACCENT)
+                val name = (NAMES[id] ?: id) + if (hiddenId(id)) "（隠し中）" else ""
+                drawLabel(c, name, r.centerX(), r.top - dp(12f), dp(14f), C.ACCENT)
             }
         }
         layoutToolbar()
+        val hideLabel = when {
+            selArea() != null -> "消す"
+            selected != null && hiddenId(selected!!) -> "表示"
+            else -> "隠す"
+        }
         val labels = listOf(
-            tbSmaller to "－ 小さく", tbBigger to "＋ 大きく", tbShape to "形",
-            tbPreset to "プリセット", tbReset to "初期配置", tbDone to "完了",
+            tbSmaller to "－ 小さく", tbBigger to "＋ 大きく", tbShape to "形", tbHide to hideLabel,
+            tbArea to "エリア", tbPreset to "プリセット", tbReset to "初期配置", tbDone to "完了",
         )
         for ((r, lab) in labels) {
-            val enabled = r === tbReset || r === tbDone || r === tbPreset || selected != null
+            val enabled = r === tbReset || r === tbDone || r === tbPreset || r === tbArea || selected != null
             pFill.color = if (r === tbDone) C.ACCENT else C.SURFACE2
             pFill.alpha = if (enabled) 255 else 120
             c.drawRoundRect(r, dp(10f), dp(10f), pFill)
             pFill.alpha = 255
             drawLabel(c, lab, r.centerX(), r.centerY(), minOf(r.height() * 0.34f, r.width() * 0.17f), if (r === tbDone) C.ACCENT_INK else C.INK)
         }
-        val tip = if (selected == null) "動かしたい部品に触れてください" else "ドラッグで移動・2本指で大きさ変更・「形」で形を変更"
+        val tip = when {
+            drawingKey != null -> "「$drawingKey」にしたい場所を、指でなぞって囲んでください"
+            selected == null -> "動かしたい部品やエリアに触れてください。「エリア」で自由な形のボタンを描けます"
+            else -> "ドラッグで移動・2本指で大きさ変更・「形」「隠す」も使えます"
+        }
         drawLabel(c, tip, width / 2f, tbDone.bottom + dp(18f), dp(13f), C.INK)
     }
 }

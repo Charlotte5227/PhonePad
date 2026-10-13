@@ -149,6 +149,11 @@ object Prefs {
         set(v) = sp.edit().putInt("keyRepeatDelay", v).apply()
 
     /** 配置のプリセット (JSON: {名前: 配置文字列}) */
+    /** コントローラーの自由な形のエリア (JSON) */
+    var padAreas: String
+        get() = s("padAreas", "[]")
+        set(v) = sp.edit().putString("padAreas", v).apply()
+
     var padPresets: String
         get() = s("padPresets", "{}")
         set(v) = sp.edit().putString("padPresets", v).apply()

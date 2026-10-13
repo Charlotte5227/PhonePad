@@ -81,7 +81,7 @@
   .rotate { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--sub); padding: 24px; pointer-events: none; }
   .rotate b { display: block; color: var(--ink); font-size: 20px; margin-bottom: 6px; }
   .edit { position: absolute; top: calc(var(--st) + 6px); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96%; }
-  .edit button { min-height: 38px; font-size: 13px; background: rgba(51,45,39,.95); }
+  .edit button { min-height: 34px; font-size: 12px; padding: 0 8px; background: rgba(51,45,39,.95); }
   .edit button.on, .scrbar button.on, .edit button:active, .scrbar button:active { background: var(--accent); color: var(--accent-ink); }
   #scrView { padding: 0; background: #000; }
   .scrArea { position: relative; flex: 1; min-height: 0; }
@@ -102,6 +102,8 @@
   .land .scrbar.open > :not(#scrMenu):not([hidden]) { display: block; }
   .land .scrbar.open #scrMenu { opacity: 1; }
   .land .scrbar.open { background: rgba(27,24,21,.82); border-radius: 14px; padding: 6px; margin: -6px; }
+  /* iPhone の Safari (ホーム画面から開いていないとき): 縦向きでは下のツールバーの分だけ空ける */
+  @media (orientation: portrait) { .ios-safari body { padding-bottom: var(--xb, 0px); } }
   /* iPhone: 上の端からなぞると通知センターなどが出るので、端から離す */
   .ios .top { padding-top: max(calc(var(--st) + 6px), 18px); }
   .ios .edit { top: max(calc(var(--st) + 6px), 30px); }
@@ -203,6 +205,7 @@
       <div class="row" style="margin-top:18px;justify-content:center"><button id="padBack" style="pointer-events:auto;flex:0 1 auto;padding:0 18px">← キーボードに戻る</button></div></div></div>
     <div class="edit" id="editBar" hidden>
       <button id="edSmall">小さく</button><button id="edBig">大きく</button><button id="edShape">形</button>
+      <button id="edHide">隠す</button><button id="edArea">エリアを描く</button>
       <button id="edReset">初期配置</button><button id="edDone" class="on">完了</button>
     </div>
   </section>
@@ -252,6 +255,10 @@
       <button data-pw="LOCK">ロック</button><button data-pw="MONOFF">画面を消す</button><button data-pw="SLEEP">スリープ</button>
       <button data-pw="RESTART">再起動</button><button data-pw="SHUTDOWN">シャットダウン</button>
     </div>
+
+    <h2>PCの接続画面</h2>
+    <div class="row"><button id="showPcPage">PCに接続画面（QRコードなど）を表示する</button></div>
+    <p class="note">PC側で PhonePad の画面（QRコード・接続中のスマホ・設定）をブラウザに開きます。</p>
 
     <h2>PCの状態</h2>
     <dl class="stat" id="sys"><dt>CPU</dt><dd>-</dd></dl>

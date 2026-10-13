@@ -189,6 +189,10 @@ func (ss *session) handleLine(line string) {
 			ss.send("ER " + base64.StdEncoding.EncodeToString([]byte("PCを更新できません: "+err.Error())))
 		}
 
+	case "SP": // PCに接続用の画面 (QRコードなど) を表示する
+		log.Printf("スマホからPCの画面を表示 (%s)", ss.deviceName)
+		openURL(fmt.Sprintf("http://127.0.0.1:%d/", statusPort))
+
 	case "AQ": // 自動起動の状態
 		ss.sendAutostart()
 

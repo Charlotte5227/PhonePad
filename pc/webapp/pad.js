@@ -29,11 +29,49 @@ const Pad = (function () {
     const saved = load("padLayout", {});
     for (const [id, v] of Object.entries(saved)) {
       if (specs[id] && Array.isArray(v) && v.length >= 3) {
-        specs[id] = [clamp(v[0], 0, 1), clamp(v[1], 0, 1), clamp(v[2], 0.4, 2.5), clamp(v[3] || 0, 0, 3) | 0];
+        specs[id] = [clamp(v[0], 0, 1), clamp(v[1], 0, 1), clamp(v[2], 0.4, 2.5), clamp(v[3] || 0, 0, 3) | 0, v[4] ? 1 : 0];
       }
     }
+    areas = (load("padAreas", []) || []).filter((a) => a && AREA_KEYS.includes(a.k) && Array.isArray(a.p) && a.p.length >= 6);
   }
-  function saveLayout() { store("padLayout", specs); }
+  function saveLayout() { store("padLayout", specs); store("padAreas", areas); }
+  const hiddenId = (id) => !!(specs[id] && specs[id][4]);
+
+  // ---- 自由な形のエリア ----
+  // 指でなぞって描いた形を、好きなボタンにする。点は配置と同じく割合 (0〜1) で持つ
+  const AREA_KEYS = ["A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "−", "H", "L3", "R3", "↑", "↓", "←", "→"];
+  let areas = [];
+  function areaBit(k) {
+    switch (k) {
+      case "A": case "B": case "X": case "Y": return bitOf({ kind: "face", face: k });
+      case "L": return LB; case "R": return RB; case "ZL": return LT; case "ZR": return RT;
+      case "+": return START; case "−": return BACK; case "H": return GUIDE;
+      case "L3": return LTHUMB; case "R3": return RTHUMB;
+      case "↑": return UP; case "↓": return DOWN; case "←": return LEFT; case "→": return RIGHT;
+    }
+    return 0;
+  }
+  const ax = (u) => MX + u * CW(), ay = (v) => MY + v * CH();
+  function inArea(a, x, y) {
+    // 点が多角形の内側にあるか (交差の数で判定)
+    let inside = false;
+    const p = a.p;
+    for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+      const xi = ax(p[i]), yi = ay(p[i + 1]), xj = ax(p[j]), yj = ay(p[j + 1]);
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function areaAt(x, y) {
+    for (let i = areas.length - 1; i >= 0; i--) if (inArea(areas[i], x, y)) return i;
+    return -1;
+  }
+  function areaCenter(a) {
+    let x = 0, y = 0;
+    for (let i = 0; i < a.p.length; i += 2) { x += a.p[i]; y += a.p[i + 1]; }
+    const n = a.p.length / 2;
+    return [x / n, y / n];
+  }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
   // ---- 部品 ----
@@ -102,21 +140,25 @@ const Pad = (function () {
   function hit(x, y) {
     let best = null, bestD = Infinity;
     for (const b of circles) {
+      if (hiddenId(b.id)) continue;
       const d = Math.hypot(x - b.cx, y - b.cy);
       if (d <= b.r * 1.3 && d / b.r < bestD) { bestD = d / b.r; best = b; }
     }
     if (best) return { type: "b", btn: best };
     for (const b of rects) {
+      if (hiddenId(b.id)) continue;
       const p = 10, r = b.rect;
       if (x >= r.l - p && x <= r.r + p && y >= r.t - p && y <= r.b + p) return { type: "b", btn: b };
     }
-    if (Math.hypot(x - dcx, y - dcy) < dOff + dR * 1.9) return { type: "d" };
+    if (!hiddenId("DP") && Math.hypot(x - dcx, y - dcy) < dOff + dR * 1.9) return { type: "d" };
+    const ai = areaAt(x, y);
+    if (ai >= 0) return { type: "a", area: areas[ai] };
     const zone = prefs.floatingSticks ? 2.1 : 1.5;
-    const dl = Math.hypot(x - sL.homeX, y - sL.homeY) / sL.r;
-    const dr = Math.hypot(x - sR.homeX, y - sR.homeY) / sR.r;
+    const dl = hiddenId("LS") ? Infinity : Math.hypot(x - sL.homeX, y - sL.homeY) / sL.r;
+    const dr = hiddenId("RS") ? Infinity : Math.hypot(x - sR.homeX, y - sR.homeY) / sR.r;
     if (dl < zone && dl <= dr) return { type: "s", stick: sL };
     if (dr < zone) return { type: "s", stick: sR };
-    if (Math.hypot(x - faceCx, y - faceCy) < faceOff + bA.r * 1.8) {
+    if (!hiddenId("FACE") && Math.hypot(x - faceCx, y - faceCy) < faceOff + bA.r * 1.8) {
       let m = faces[0];
       for (const f of faces) if (Math.hypot(x - f.cx, y - f.cy) < Math.hypot(x - m.cx, y - m.cy)) m = f;
       return { type: "b", btn: m };
@@ -134,7 +176,10 @@ const Pad = (function () {
 
   function held() {
     let m = dpadBits;
-    for (const o of owners.values()) if (o.type === "b" && ["normal", "face", "shoulder"].includes(o.btn.kind)) m |= bitOf(o.btn);
+    for (const o of owners.values()) {
+      if (o.type === "b" && ["normal", "face", "shoulder"].includes(o.btn.kind)) m |= bitOf(o.btn);
+      else if (o.type === "a") m |= areaBit(o.area.k);
+    }
     return m;
   }
 
@@ -172,6 +217,7 @@ const Pad = (function () {
 
   // ---- 編集 ----
   let editing = false, selected = null, dragging = null, dragOff = [0, 0];
+  let drawingKey = null, drawPts = null, drawPid = null;
 
   function editHit(x, y) {
     let best = null, area = Infinity;
@@ -181,28 +227,82 @@ const Pad = (function () {
         if (a < area) { area = a; best = id; }
       }
     }
-    return best;
+    if (best) return best;
+    const ai = areaAt(x, y);
+    return ai >= 0 ? "AREA:" + ai : null;
+  }
+  const selArea = () => (selected && selected.startsWith("AREA:") ? areas[+selected.slice(5)] : null);
+  function scaleSel(f) {
+    const a = selArea();
+    if (a) {
+      const [cx, cy] = areaCenter(a);
+      for (let i = 0; i < a.p.length; i += 2) { a.p[i] = clamp(cx + (a.p[i] - cx) * f, 0, 1); a.p[i + 1] = clamp(cy + (a.p[i + 1] - cy) * f, 0, 1); }
+    } else if (selected) specs[selected][2] = clamp(specs[selected][2] * f, 0.4, 2.5);
+    layout(); draw();
+  }
+
+  // ボタンを選んでから、指でなぞってエリアを描く
+  function pickAreaKey() {
+    const sheet = document.createElement("div");
+    sheet.className = "sheet";
+    const box = document.createElement("div");
+    const h = document.createElement("h3"); h.textContent = "どのボタンのエリアを描きますか？";
+    const grid = document.createElement("div"); grid.className = "grid2"; grid.style.gridTemplateColumns = "repeat(6, 1fr)";
+    for (const k of AREA_KEYS) {
+      const b = document.createElement("button"); b.textContent = k;
+      b.onclick = () => {
+        sheet.remove();
+        drawingKey = k;
+        toast("「" + k + "」にしたい場所を、指でなぞって囲んでください");
+        draw();
+      };
+      grid.appendChild(b);
+    }
+    const note = document.createElement("p"); note.className = "note";
+    note.textContent = "描いた形の中に触れると、そのボタンを押したことになります。指を滑らせて隣のエリアに移ることもできます。";
+    const cancel = document.createElement("button"); cancel.textContent = "やめる"; cancel.style.marginTop = "10px"; cancel.style.width = "100%";
+    cancel.onclick = () => sheet.remove();
+    box.append(h, grid, note, cancel);
+    sheet.appendChild(box);
+    sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.remove(); });
+    document.body.appendChild(sheet);
   }
 
   function setEditing(on) {
     editing = on;
     selected = null;
+    drawingKey = null; drawPts = null;
     document.getElementById("editBar").hidden = !on;
     if (!on) saveLayout();
     draw();
   }
   document.getElementById("edDone").onclick = () => setEditing(false);
-  document.getElementById("edSmall").onclick = () => { if (selected) { specs[selected][2] = clamp(specs[selected][2] - 0.1, 0.4, 2.5); layout(); draw(); } };
-  document.getElementById("edBig").onclick = () => { if (selected) { specs[selected][2] = clamp(specs[selected][2] + 0.1, 0.4, 2.5); layout(); draw(); } };
+  document.getElementById("edSmall").onclick = () => scaleSel(0.9);
+  document.getElementById("edBig").onclick = () => scaleSel(1.1);
+  document.getElementById("edArea").onclick = () => pickAreaKey();
+  document.getElementById("edHide").onclick = () => {
+    if (!selected) { toast("隠す部品（または消すエリア）を選んでください"); return; }
+    if (selArea()) {
+      if (!confirm("このエリア（" + selArea().k + "）を消しますか？")) return;
+      areas.splice(+selected.slice(5), 1);
+      selected = null;
+    } else {
+      if (selected === "EDIT" || selected === "SWITCH") { toast("✎ と ⌨ は隠せません"); return; }
+      specs[selected][4] = specs[selected][4] ? 0 : 1;
+      toast(specs[selected][4] ? "隠しました（使うときは見えません）" : "表示に戻しました");
+    }
+    draw();
+  };
   document.getElementById("edShape").onclick = () => {
+    if (selArea()) { toast("エリアの形は、消してから描き直してください"); return; }
     if (!selected) { toast("形を変える部品を選んでください"); return; }
     specs[selected][3] = ((specs[selected][3] | 0) + 1) % 4;
     toast("形: " + SHAPES[specs[selected][3]]);
     draw();
   };
   document.getElementById("edReset").onclick = () => {
-    if (!confirm("配置を初期に戻しますか？")) return;
-    store("padLayout", {}); loadLayout(); layout(); draw();
+    if (!confirm("配置を初期に戻しますか？（隠した部品は元に戻り、描いたエリアは消えます）")) return;
+    store("padLayout", {}); store("padAreas", []); loadLayout(); layout(); draw();
   };
 
   // ---- タッチ ----
@@ -213,9 +313,16 @@ const Pad = (function () {
     cv.setPointerCapture(e.pointerId);
     const [x, y] = pos(e);
     if (editing) {
+      if (drawingKey) {
+        if (drawPts) return;
+        drawPts = [x, y]; drawPid = e.pointerId;
+        draw();
+        return;
+      }
       const id = editHit(x, y);
       selected = id;
-      if (id) { dragging = { id, pid: e.pointerId }; dragOff = [MX + specs[id][0] * CW() - x, MY + specs[id][1] * CH() - y]; }
+      if (id && id.startsWith("AREA:")) dragging = { id, pid: e.pointerId, lx: x, ly: y };
+      else if (id) { dragging = { id, pid: e.pointerId }; dragOff = [MX + specs[id][0] * CW() - x, MY + specs[id][1] * CH() - y]; }
       draw();
       return;
     }
@@ -223,10 +330,12 @@ const Pad = (function () {
     if (!o) return;
     if (o.type === "b") {
       const k = o.btn.kind;
-      if (k === "switch") { Views.show("kbView"); return; }
-      if (k === "gear") { Views.show("moreView"); return; }
-      if (k === "edit") { setEditing(true); return; }
+      if (k === "switch") { blockClicks(); Views.show("kbView"); return; }
+      if (k === "gear") { blockClicks(); Views.show("moreView"); return; }
+      if (k === "edit") { blockClicks(); setEditing(true); return; }
       if (k === "turbo") { turboPressed(); sendState(); draw(); return; }
+      owners.set(e.pointerId, o);
+    } else if (o.type === "a") {
       owners.set(e.pointerId, o);
     } else if (o.type === "d") {
       owners.set(e.pointerId, o);
@@ -245,8 +354,21 @@ const Pad = (function () {
   cv.addEventListener("pointermove", (e) => {
     const [x, y] = pos(e);
     if (editing) {
+      if (drawPts && drawPid === e.pointerId) {
+        const n = drawPts.length;
+        if (Math.hypot(x - drawPts[n - 2], y - drawPts[n - 1]) >= 6 && n < 600) { drawPts.push(x, y); draw(); }
+        return;
+      }
       if (dragging && dragging.pid === e.pointerId) {
         const id = dragging.id;
+        if (id.startsWith("AREA:")) {
+          const a = areas[+id.slice(5)];
+          const du = (x - dragging.lx) / CW(), dv = (y - dragging.ly) / CH();
+          for (let i = 0; i < a.p.length; i += 2) { a.p[i] = clamp(a.p[i] + du, 0, 1); a.p[i + 1] = clamp(a.p[i + 1] + dv, 0, 1); }
+          dragging.lx = x; dragging.ly = y;
+          draw();
+          return;
+        }
         specs[id][0] = clamp((x + dragOff[0] - MX) / CW(), 0, 1);
         specs[id][1] = clamp((y + dragOff[1] - MY) / CH(), 0, 1);
         layout(); draw();
@@ -257,6 +379,10 @@ const Pad = (function () {
     if (!o) return;
     if (o.type === "d") { const nd = dpadDir(x, y); if (nd !== dpadBits) dpadBits = nd; }
     else if (o.type === "s") stickSet(o.stick, x, y);
+    else if (o.type === "a") {
+      // エリアからエリアへ指を滑らせられる
+      if (!inArea(o.area, x, y)) { const ai = areaAt(x, y); if (ai >= 0) o.area = areas[ai]; }
+    }
     else if (o.type === "b" && ["face"].includes(o.btn.kind)) {
       // ABXY は指をずらして隣のボタンへ移れる
       const n = hit(x, y);
@@ -266,7 +392,26 @@ const Pad = (function () {
     draw();
   });
   const up = (e) => {
-    if (editing) { if (dragging && dragging.pid === e.pointerId) dragging = null; return; }
+    if (editing) {
+      if (drawPts && drawPid === e.pointerId) {
+        // 描き終わり: 小さすぎなければエリアにする
+        const p = drawPts; drawPts = null;
+        let a2 = 0;
+        for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) a2 += p[j] * p[i + 1] - p[i] * p[j + 1];
+        if (p.length < 8 || Math.abs(a2) / 2 < 900) { toast("小さすぎます。もう少し大きく囲んでください"); draw(); return; }
+        const pts = [];
+        for (let i = 0; i < p.length; i += 2) pts.push(clamp((p[i] - MX) / CW(), 0, 1), clamp((p[i + 1] - MY) / CH(), 0, 1));
+        areas.push({ k: drawingKey, p: pts });
+        selected = "AREA:" + (areas.length - 1);
+        toast("「" + drawingKey + "」のエリアを作りました");
+        drawingKey = null;
+        saveLayout();
+        draw();
+        return;
+      }
+      if (dragging && dragging.pid === e.pointerId) dragging = null;
+      return;
+    }
     const o = owners.get(e.pointerId);
     if (!o) return;
     owners.delete(e.pointerId);
@@ -338,32 +483,60 @@ const Pad = (function () {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
     const pressed = (b) => { for (const o of owners.values()) if (o.type === "b" && o.btn === b) return true; return false; };
-    drawStick(sL); drawStick(sR);
+    // 自由な形のエリア (一番下に描く)
+    for (let i = 0; i < areas.length; i++) {
+      const a = areas[i];
+      let on = false;
+      for (const o of owners.values()) if (o.type === "a" && o.area === a) on = true;
+      g.beginPath();
+      for (let k = 0; k < a.p.length; k += 2) (k ? g.lineTo : g.moveTo).call(g, ax(a.p[k]), ay(a.p[k + 1]));
+      g.closePath();
+      g.fillStyle = on ? "rgba(224,163,90,.55)" : "rgba(224,163,90,.12)"; g.fill();
+      g.lineWidth = editing && selected === "AREA:" + i ? 3 : 2;
+      g.setLineDash(editing && selected === "AREA:" + i ? [6, 6] : []);
+      g.strokeStyle = editing && selected === "AREA:" + i ? C.ink : C.accent; g.stroke();
+      g.setLineDash([]);
+      const [cu, cv2] = areaCenter(a);
+      label(a.k, ax(cu), ay(cv2), Math.min(H * 0.09, 34), on ? C.accentInk : C.accent);
+    }
+    if (drawPts) {
+      g.beginPath();
+      for (let k = 0; k < drawPts.length; k += 2) (k ? g.lineTo : g.moveTo).call(g, drawPts[k], drawPts[k + 1]);
+      g.strokeStyle = C.ink; g.lineWidth = 3; g.stroke();
+    }
+    // 隠した部品は、編集中だけ薄く表示する
+    const hideAlpha = (id) => (hiddenId(id) ? (editing ? 0.25 : 0) : 1);
+    g.globalAlpha = hideAlpha("LS"); if (g.globalAlpha) drawStick(sL);
+    g.globalAlpha = hideAlpha("RS"); if (g.globalAlpha) drawStick(sR);
+    g.globalAlpha = 1;
     // 十字キー
     const dirs = [[UP, 0, -1, "▲"], [DOWN, 0, 1, "▼"], [LEFT, -1, 0, "◀"], [RIGHT, 1, 0, "▶"]];
-    for (const [bit, ox, oy, lab] of dirs) {
+    g.globalAlpha = hideAlpha("DP");
+    if (g.globalAlpha) for (const [bit, ox, oy, lab] of dirs) {
       const t = { id: "DP", cx: dcx + ox * dOff, cy: dcy + oy * dOff, r: dR, label: lab, kind: "dp", fixedBit: bit };
       circleBtn(t, (dpadBits & bit) !== 0, lab, 0.75);
     }
     for (const b of circles) {
-      if (b.kind === "turbo") {
-        circleBtn(b, globalTurbo, "T");
-        continue;
-      }
-      circleBtn(b, pressed(b));
+      g.globalAlpha = hideAlpha(b.id);
+      if (!g.globalAlpha) continue;
+      if (b.kind === "turbo") circleBtn(b, globalTurbo, "T");
+      else circleBtn(b, pressed(b));
     }
-    for (const b of rects) rectBtn(b, pressed(b));
+    for (const b of rects) { g.globalAlpha = hideAlpha(b.id); if (g.globalAlpha) rectBtn(b, pressed(b)); }
+    g.globalAlpha = 1;
     if ((globalTurbo || auto) && !editing) {
       label(globalTurbo ? "連打: 押している間" : "自動連打あり", W / 2, H * 0.97, 13, C.turbo);
     }
     if (editing) {
       for (const [id, b] of Object.entries(bounds)) {
+        if (drawingKey) break;
         g.setLineDash([6, 6]); g.lineWidth = id === selected ? 3 : 1.5;
         g.strokeStyle = id === selected ? C.ink : C.sub;
         g.strokeRect(b.l - 4, b.t - 4, b.r - b.l + 8, b.b - b.t + 8);
       }
       g.setLineDash([]);
-      label(selected ? "ドラッグで移動・上のボタンで大きさと形" : "動かしたい部品に触れてください", W / 2, H * 0.97, 13, C.ink);
+      label(drawingKey ? "「" + drawingKey + "」にしたい場所を、指でなぞって囲んでください"
+        : selected ? "ドラッグで移動・上のボタンで大きさ・形・隠す" : "動かしたい部品やエリアに触れてください", W / 2, H * 0.97, 13, C.ink);
     }
   }
 
@@ -394,6 +567,6 @@ const Pad = (function () {
 
   return {
     prefsChanged() { lastLine = ""; if (Views.current === "padView") { layout(); draw(); sendState(); } },
-    resetLayout() { store("padLayout", {}); loadLayout(); layout(); draw(); },
+    resetLayout() { store("padLayout", {}); store("padAreas", []); loadLayout(); layout(); draw(); },
   };
 })();

@@ -5,6 +5,11 @@ const $ = (id) => document.getElementById(id);
 // iPhone・iPad (画面の端からなぞるとOSの操作が優先されるので、端にボタンを置かない)
 const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 if (IS_IOS) document.documentElement.classList.add("ios");
+// iPhone の Safari (ホーム画面から開いていないとき)。iOS 26 の Safari は下のツールバーがページに重なり、
+// ページからはその高さが分からないので、余白を空ける (設定で調整できる)
+const IS_IOS_SAFARI = IS_IOS && navigator.standalone === false;
+const SAFARI_VER = parseInt((navigator.userAgent.match(/Version\/(\d+)/) || [])[1] || "0", 10);
+if (IS_IOS_SAFARI) document.documentElement.classList.add("ios-safari");
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -52,8 +57,11 @@ const prefs = Object.assign({
   turboRate: 15, positional: false, floatingSticks: true, fieldAlways: false,
   scrControl: true, scrQuality: 1, scrDragCursor: false, mutePc: false,
   keyRepeatRate: 16, keyRepeatDelay: 400, scrAutoZoom: true,
+  bottomGap: SAFARI_VER >= 26 && /iPhone/.test(navigator.userAgent) ? 64 : 0,
 }, load("prefs", {}));
-function savePrefs() { store("prefs", prefs); }
+function savePrefs() { store("prefs", prefs); applyBottomGap(); }
+function applyBottomGap() { document.documentElement.style.setProperty("--xb", (IS_IOS_SAFARI ? prefs.bottomGap : 0) + "px"); }
+applyBottomGap();
 
 // ---------------------------------------------------------------- 接続 (暗号化)
 
@@ -299,6 +307,14 @@ if (window.visualViewport) {
 document.addEventListener("touchmove", (e) => { if (e.scale !== undefined && e.scale !== 1) e.preventDefault(); }, { passive: false });
 // ずれてしまったときは元に戻す
 window.addEventListener("scroll", () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); });
+
+// 画面を切り替えた直後の「おまけのクリック」を捨てる
+// (指を離したときのクリックが、切り替え後に同じ場所に出てきたボタンに当たってしまうため)
+let blockClicksUntil = 0;
+function blockClicks(ms) { blockClicksUntil = performance.now() + (ms || 450); }
+document.addEventListener("click", (e) => {
+  if (performance.now() < blockClicksUntil) { e.stopPropagation(); e.preventDefault(); }
+}, true);
 
 // ---------------------------------------------------------------- 修飾キー (Ctrl など)
 
@@ -835,12 +851,14 @@ Views.on("moreView", (on) => {
   slider("keyRepeatRate", "矢印キーなどを長押ししたときの速さ（回/秒）", 4, 40, 1);
   slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
   check("invertTwoFinger", "2本指スクロールの向きを逆にする");
+  if (IS_IOS_SAFARI) slider("bottomGap", "画面の下の余白（下のボタンが Safari のバーに隠れるときは大きく）", 0, 120, 2);
   check("fieldAlways", "PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ）");
   check("scrAutoZoom", "PCの画面で文字を入力するとき、最後にタップした場所を拡大する");
   slider("turboRate", "連打の速さ（回/秒）", 5, 30, 1);
   check("positional", "ABXYをSwitchの位置どおりに割り当てる（オフ: 文字どおり A→A）", () => window.Pad && Pad.prefsChanged());
   check("floatingSticks", "コントローラーのスティックを触れた位置に出す", () => window.Pad && Pad.prefsChanged());
 })();
+$("showPcPage").onclick = () => { Link.send("SP"); toast("PCに接続画面を表示しました"); };
 $("padReset").onclick = () => { if (confirm("コントローラーの配置を初期に戻しますか？")) { window.Pad && Pad.resetLayout(); toast("初期配置に戻しました"); } };
 
 // PCの音をスマホで聞く (このページを開いている間だけ)
@@ -919,6 +937,7 @@ const COACH = {
     "L・R のスティックは、触れた位置に出ます（設定で固定にもできます）。",
     "T を押す=「押している間は連打」のON/OFF。ボタンを押しながら T=そのボタンだけ自動連打。",
     "✎=ボタンの位置・大きさ・形を変える。⌨=キーボードに戻る。⚙=設定。",
+    "✎ →「エリアを描く」で、指でなぞって囲んだ場所を好きなボタンにできます（例: 右半分を全部 A）。使わない部品は「隠す」で消せます。",
   ]],
   scrView: ["PCの画面", [
     "「操作: ON」のとき: タップ=クリック、長押し=右クリック、長押ししてから動かす=ドラッグ。",

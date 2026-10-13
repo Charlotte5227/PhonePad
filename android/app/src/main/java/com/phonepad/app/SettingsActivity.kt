@@ -85,12 +85,13 @@ class SettingsActivity : Activity() {
         slider("スティックの反応カーブ（1=そのまま、大きいほど小さく倒したとき細かく動く）", 0.5f, 2.5f, Prefs.padCurve, 2) {
             Prefs.padCurve = it
         }
-        box.addView(label(this, "ボタンやスティックの位置・大きさは、コントローラー画面上部の ✎ から変えられます。", 12f, C.SUB).apply {
+        box.addView(label(this, "ボタンやスティックの位置・大きさ・形、隠す、自由な形のエリアは、コントローラー画面上部の ✎ から変えられます。", 12f, C.SUB).apply {
             setPadding(0, dpi(6), 0, 0)
         })
         box.addView(KeyButton(this, "コントローラーの配置を初期に戻す", 14f).apply {
             onTap = {
                 Prefs.padLayout = ""
+                Prefs.padAreas = "[]"
                 android.widget.Toast.makeText(this@SettingsActivity, "初期配置に戻しました", android.widget.Toast.LENGTH_SHORT).show()
             }
         }, LinearLayout.LayoutParams(-1, dpi(46)).apply { topMargin = dpi(8) })
@@ -106,6 +107,16 @@ class SettingsActivity : Activity() {
             Link.send("AS ${if (it) 1 else 0}")
         }
         auto.isEnabled = Link.state == Link.State.CONNECTED
+        box.addView(KeyButton(this, "PCに接続画面（QRコードなど）を表示する", 14f).apply {
+            onTap = {
+                if (Link.state == Link.State.CONNECTED) {
+                    Link.send("SP")
+                    android.widget.Toast.makeText(this@SettingsActivity, "PCに接続画面を表示しました", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    android.widget.Toast.makeText(this@SettingsActivity, "PCとつながっているときに使えます", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, dpi(46)).apply { topMargin = dpi(6) })
         Link.onAutostart = { on ->
             autoUpdating = true
             auto.isChecked = on
