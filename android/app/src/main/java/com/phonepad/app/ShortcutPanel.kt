@@ -273,8 +273,11 @@ class ShortcutPanel(private val act: Activity) {
             .show()
     }
 
-    /** ショートカットの追加・変更 (sc=null なら追加) */
-    private fun editShortcut(sc: Shortcut?) {
+    /**
+     * ショートカットの追加・変更 (sc=null なら追加)。
+     * onSave を渡すと、★の一覧ではなくそちらに渡す (キーボード画面に置くキーなど)
+     */
+    fun editShortcut(sc: Shortcut?, title: String? = null, onSave: ((Shortcut) -> Unit)? = null) {
         val box = LinearLayout(act).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(act.dpi(20), act.dpi(8), act.dpi(20), 0)
@@ -385,7 +388,7 @@ class ShortcutPanel(private val act: Activity) {
         applyType()
 
         val b = AlertDialog.Builder(act, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(if (sc == null) "ボタンを追加" else "ボタンを変更")
+            .setTitle(title ?: if (sc == null) "ボタンを追加" else "ボタンを変更")
             .setView(ScrollView(act).apply { addView(box) })
             .setPositiveButton("保存") { _, _ ->
                 val item: Shortcut
@@ -406,6 +409,10 @@ class ShortcutPanel(private val act: Activity) {
                     val lab = name.text.toString().trim().ifEmpty { Shortcuts.describe(Shortcut("", k, mods)) }
                     item = Shortcut(lab, k, mods)
                 }
+                if (onSave != null) {
+                    onSave(item)
+                    return@setPositiveButton
+                }
                 if (sc == null) {
                     list.add(item)
                 } else {
@@ -415,7 +422,7 @@ class ShortcutPanel(private val act: Activity) {
                 refresh()
             }
             .setNegativeButton("キャンセル", null)
-        if (sc != null) {
+        if (sc != null && onSave == null) {
             b.setNeutralButton("削除") { _, _ ->
                 list.remove(sc)
                 Shortcuts.save(list)

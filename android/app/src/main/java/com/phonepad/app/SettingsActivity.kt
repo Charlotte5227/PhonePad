@@ -57,15 +57,31 @@ class SettingsActivity : Activity() {
         toggle("英数字専用キーボードにする（英字が確実に1文字ずつ送られます。日本語入力は使えません）", Prefs.latinOnly) {
             Prefs.latinOnly = it
         }
-        toggle("PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ表示）", Prefs.fieldAlways) {
-            Prefs.fieldAlways = it
-        }
         slider("矢印キーなどを長押ししたときの速さ（回/秒）", 4f, 40f, Prefs.keyRepeatRate.toFloat(), 0) {
             Prefs.keyRepeatRate = it.roundToInt()
         }
         slider("長押ししてから連続入力が始まるまで（ミリ秒）", 150f, 800f, Prefs.keyRepeatDelay.toFloat(), 0) {
             Prefs.keyRepeatDelay = it.roundToInt()
         }
+
+        toggle("マウスを片手操作にする（キーボード画面のボタンを隠してしまったときも、ここで切り替えられます）", Prefs.oneHand) {
+            Prefs.oneHand = it
+        }
+        box.addView(label(this, "キー・マウスの位置や大きさ、隠す、キーの追加（F5、Ctrl+C など）は、キーボード画面上部の ✎ から変えられます。「PCの入力欄」もそこで表示にできます。", 12f, C.SUB).apply {
+            setPadding(0, dpi(6), 0, 0)
+        })
+        box.addView(KeyButton(this, "キーボード画面の配置を初期に戻す", 14f).apply {
+            onTap = {
+                android.app.AlertDialog.Builder(this@SettingsActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setMessage("キーボード画面の配置を、マウス・スティック・片手操作の全部で初期に戻しますか？（追加したキーも消えます）")
+                    .setPositiveButton("戻す") { _, _ ->
+                        for (m in listOf("tp", "stick", "oneR", "oneL")) Prefs.setKbLayout(m, null)
+                        Prefs.kbCustom = "[]"
+                        android.widget.Toast.makeText(this@SettingsActivity, "初期配置に戻しました", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("キャンセル", null).show()
+            }
+        }, LinearLayout.LayoutParams(-1, dpi(46)).apply { topMargin = dpi(8) })
 
         section("コントローラー")
         slider("連打の速さ（回/秒）", 5f, 30f, Prefs.turboRate.toFloat(), 0) { Prefs.turboRate = it.roundToInt() }

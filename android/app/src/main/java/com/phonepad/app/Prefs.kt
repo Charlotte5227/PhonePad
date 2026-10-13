@@ -67,10 +67,20 @@ object Prefs {
         get() = b("latinOnly", false)
         set(v) = sp.edit().putBoolean("latinOnly", v).apply()
 
-    /** PCの入力欄の表示: true=常に / false=文字を入力しているとき(スマホのキーボード表示中)だけ */
-    var fieldAlways: Boolean
+    /** 以前の設定「PCの入力欄を常に表示」。今はキーボード画面の配置の初期値にだけ使う */
+    val fieldAlways: Boolean
         get() = b("fieldAlways", false)
-        set(v) = sp.edit().putBoolean("fieldAlways", v).apply()
+
+    /** キーボード画面の配置 (JSON: {部品: [x, y, 幅, 高さ, 隠す]})。mode = tp / stick / oneR / oneL */
+    fun kbLayout(mode: String): String = s("kbLayout.$mode", "")
+    fun setKbLayout(mode: String, v: String?) {
+        if (v == null) sp.edit().remove("kbLayout.$mode").apply() else sp.edit().putString("kbLayout.$mode", v).apply()
+    }
+
+    /** キーボード画面に自分で追加したキー (JSON 配列) */
+    var kbCustom: String
+        get() = s("kbCustom", "[]")
+        set(v) = sp.edit().putString("kbCustom", v).apply()
 
     // ---- コントローラー ----
     var turboRate: Int

@@ -23,6 +23,10 @@ class PcFieldView(ctx: Context) : LinearLayout(ctx) {
     private val title = label(ctx, "", 11f, C.SUB)
     private val scroll = object : ScrollView(ctx) {
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            if (fill) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                return
+            }
             // 高さは最大で数行分 (キーボード表示中は少なめ)
             val maxH = context.dpi(if (compact) 66 else 112)
             super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST))
@@ -35,6 +39,14 @@ class PcFieldView(ctx: Context) : LinearLayout(ctx) {
         set(v) {
             field = v; scroll.requestLayout()
         }
+
+    private var fill = false
+
+    /** 決まった大きさの枠いっぱいに表示する (キーボード画面に自由に置く「PCの入力欄」) */
+    fun fillParent() {
+        fill = true
+        scroll.layoutParams = LayoutParams(-1, 0, 1f)
+    }
 
     private var lastJson = ""
     private var pcText = ""

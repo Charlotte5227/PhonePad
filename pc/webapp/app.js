@@ -54,7 +54,7 @@ function toast(msg) {
 // 設定 (このブラウザに保存)
 const prefs = Object.assign({
   mouseSpeed: 1.5, mouseAccel: 0.6, scrollSpeed: 1.0, invertTwoFinger: false,
-  turboRate: 15, positional: false, floatingSticks: true, fieldAlways: false,
+  turboRate: 15, positional: false, floatingSticks: true,
   scrControl: true, scrQuality: 1, scrDragCursor: false, mutePc: false,
   keyRepeatRate: 16, keyRepeatDelay: 400, scrAutoZoom: true, oneHand: false, oneHandLeft: false,
   bottomGap: SAFARI_VER >= 26 && /iPhone/.test(navigator.userAgent) ? 64 : 0,
@@ -454,16 +454,19 @@ attachTyper($("typer"), (f) => {
 // ---- PCで入力中の欄 ----
 const Mirror = {
   text: "", d2p: [0], p2d: [0], ok: false, last: "",
+  // 表示する場所 (キーボードを出したときの欄と、配置した「PCの入力欄」)
+  boxes: [{ box: $("mirror"), title: $("mirrorTitle") }],
   update(json) {
     if (json === this.last) return;
     this.last = json;
     let o;
     try { o = JSON.parse(json); } catch (e) { return; }
-    const box = $("mirror");
     if (!o.ok) {
       this.ok = false;
-      $("mirrorTitle").textContent = "PCの入力欄" + (o.reason ? "（" + o.reason + "）" : "（読み取れません）");
-      box.textContent = "";
+      for (const { box, title } of this.boxes) {
+        title.textContent = "PCの入力欄" + (o.reason ? "（" + o.reason + "）" : "（読み取れません）");
+        box.textContent = "";
+      }
       return;
     }
     this.ok = true;
@@ -483,29 +486,31 @@ const Mirror = {
     this.text = disp; this.d2p = d2p; this.p2d = p2d;
     const caret = o.caret >= 0 && o.caret <= pc.length ? p2d[o.caret] : -1;
     const sel = o.selEnd >= 0 && o.selEnd <= pc.length ? p2d[o.selEnd] : -1;
-    $("mirrorTitle").textContent = caret >= 0 ? "PCの入力欄（触れた位置にカーソルを移動）" : "PCの入力欄";
-    box.textContent = "";
-    const add = (t, cls) => {
-      if (!t) return;
-      const s = document.createElement("span");
-      if (cls) s.className = cls;
-      s.textContent = t;
-      box.appendChild(s);
-    };
-    if (caret >= 0 && sel > caret) {
-      add(disp.slice(0, caret)); add(disp.slice(caret, sel), "sel"); add(disp.slice(sel));
-    } else if (caret >= 0) {
-      add(disp.slice(0, caret));
-      const c = document.createElement("span"); c.className = "caret"; box.appendChild(c);
-      add(disp.slice(caret));
-      // カーソルが見えるようにスクロール
-      requestAnimationFrame(() => { const r = c.offsetTop - box.clientHeight / 3; if (r > box.scrollTop + box.clientHeight - 20 || c.offsetTop < box.scrollTop) box.scrollTop = Math.max(0, r); });
-    } else add(disp);
-    if (!disp) add(" ");
+    for (const { box, title } of this.boxes) {
+      title.textContent = caret >= 0 ? "PCの入力欄（触れた位置にカーソルを移動）" : "PCの入力欄";
+      box.textContent = "";
+      const add = (t, cls) => {
+        if (!t) return;
+        const sp = document.createElement("span");
+        if (cls) sp.className = cls;
+        sp.textContent = t;
+        box.appendChild(sp);
+      };
+      if (caret >= 0 && sel > caret) {
+        add(disp.slice(0, caret)); add(disp.slice(caret, sel), "sel"); add(disp.slice(sel));
+      } else if (caret >= 0) {
+        add(disp.slice(0, caret));
+        const c = document.createElement("span"); c.className = "caret"; box.appendChild(c);
+        add(disp.slice(caret));
+        // カーソルが見えるようにスクロール
+        requestAnimationFrame(() => { const r = c.offsetTop - box.clientHeight / 3; if (r > box.scrollTop + box.clientHeight - 20 || c.offsetTop < box.scrollTop) box.scrollTop = Math.max(0, r); });
+      } else add(disp);
+      if (!disp) add(" ");
+    }
   },
 };
 Link.on("TF ", (b) => Mirror.update(unb64(b)));
-$("mirror").addEventListener("pointerdown", (e) => {
+function mirrorTap(box) { box.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   if (!Mirror.ok) return;
   // 触れた位置の文字の番号を求める
@@ -519,21 +524,25 @@ $("mirror").addEventListener("pointerdown", (e) => {
   }
   if (!node) return;
   let idx = 0;
-  for (const s of $("mirror").childNodes) {
+  for (const s of box.childNodes) {
     if (s === node || s.contains(node)) { idx += s.classList && s.classList.contains("caret") ? 0 : off; break; }
     idx += s.classList && s.classList.contains("caret") ? 0 : s.textContent.length;
   }
   idx = Math.max(0, Math.min(idx, Mirror.d2p.length - 1));
   Link.send("CS " + Mirror.d2p[idx]);
-});
+}); }
+mirrorTap($("mirror"));
 let mirrorTimer = 0;
+// 「PCの入力欄」は、文字を打っている間と、配置で表示にしているときに出す
+let mirrorPartShown = () => false;
 function updateMirrorVisibility() {
-  const show = Views.current === "kbView" && (prefs.fieldAlways || typing);
-  $("mirrorBox").hidden = !show;
+  const kb = Views.current === "kbView";
+  $("mirrorBox").hidden = !(kb && typing);
+  const show = kb && (typing || mirrorPartShown());
   clearInterval(mirrorTimer);
   if (show) { Link.send("TQ"); mirrorTimer = setInterval(() => Link.send("TQ"), 700); }
 }
-echoHook = () => { if (!$("mirrorBox").hidden) setTimeout(() => Link.send("TQ"), 120); };
+echoHook = () => { setTimeout(() => Link.send("TQ"), 120); };
 Views.on("kbView", updateMirrorVisibility);
 
 // ---- トラックパッド ----
@@ -673,17 +682,15 @@ Views.on("kbView", updateMirrorVisibility);
 // 1本指で全部できるようにする。右手用はボタンの列を右 (親指の側) に、左手用は左に置く。
 // 右手用では「＜ 左手用」を左寄せ、左手用では「＞ 右手用」を右寄せにする
 (function oneHand() {
-  const box = $("oneHand"), pad = $("ohPad");
+  const pad = $("ohPad");
   let grabbing = false;
+  // 部品の位置は kblayout.js (右手用・左手用で別々の配置)
   function apply() {
-    const on = prefs.oneHand;
-    box.hidden = !on;
-    $("pad").hidden = on;
-    document.querySelector("#kbView .btnbar").hidden = on;
-    box.classList.toggle("left", prefs.oneHandLeft);
     $("ohHand").textContent = prefs.oneHandLeft ? "＞ 右手用" : "＜ 左手用";
-    if (!on && grabbing) setGrab(false);
+    if (!prefs.oneHand && grabbing) setGrab(false);
+    if (typeof KbStage !== "undefined") KbStage.refresh();
   }
+  window.applyOneHand = apply;
   function setGrab(g) {
     grabbing = g;
     Link.send("MB L " + (g ? 1 : 0));
@@ -916,7 +923,7 @@ Views.on("moreView", (on) => {
     const l = document.createElement("label");
     l.className = "chk";
     const c = document.createElement("input");
-    c.type = "checkbox"; c.checked = !!prefs[key];
+    c.type = "checkbox"; c.checked = !!prefs[key]; c.dataset.k = key;
     c.onchange = () => { prefs[key] = c.checked; savePrefs(); after && after(); };
     const s = document.createElement("span"); s.textContent = title;
     l.append(c, s);
@@ -928,8 +935,11 @@ Views.on("moreView", (on) => {
   slider("keyRepeatRate", "矢印キーなどを長押ししたときの速さ（回/秒）", 4, 40, 1);
   slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
   check("invertTwoFinger", "2本指スクロールの向きを逆にする");
+  check("oneHand", "マウスを片手操作にする（キーボード画面のボタンを隠してしまったときも、ここで切り替えられます）", () => window.applyOneHand && applyOneHand());
+  check("oneHandLeft", "片手操作を左手用にする", () => window.applyOneHand && applyOneHand());
+  // 画面のボタンで切り替えたときにも合わせる
+  Views.on("moreView", (on) => { if (on) box.querySelectorAll("input[data-k]").forEach((c) => { c.checked = !!prefs[c.dataset.k]; }); });
   if (IS_IOS_SAFARI) slider("bottomGap", "画面の下の余白（下のボタンが Safari のバーに隠れるときは大きく）", 0, 120, 2);
-  check("fieldAlways", "PCの入力欄の内容を常に表示する（オフ: 文字を入力しているときだけ）");
   check("scrAutoZoom", "PCの画面で文字を入力するとき、最後にタップした場所を拡大する");
   slider("turboRate", "連打の速さ（回/秒）", 5, 30, 1);
   check("positional", "ABXYをSwitchの位置どおりに割り当てる（オフ: 文字どおり A→A）", () => window.Pad && Pad.prefsChanged());
@@ -1002,13 +1012,14 @@ $("guideLink").onclick = () => { window.open("https://charlotte5227.github.io/Ph
 // 画面ごとの使い方 (初めて開いたときに一度だけ自動で出す)
 const COACH = {
   kbView: ["キーボードとマウス", [
-    "上の入力欄をタップして文字を打つと、すぐPCに入ります。日本語の変換も使えます。",
+    "上の入力欄をタップして文字を打つと、すぐPCに入ります。日本語の変換も使えます。文字を打っている間は、入力用のキーが上に並びます。",
     "下の大きな面がマウスです。なぞる=カーソル移動、左半分をタップ=左クリック、右半分をタップ=右クリック。",
     "2本指でなぞる=スクロール。長押ししてから動かす=ドラッグ。",
     "「長押し」ボタンを押しながらなぞる=スクロール。何もせず離す=中クリック。",
     "Ctrl・Shift・Alt・Win は、1回押すと次の1キーだけ、2回押すと押しっぱなし（もう1回で解除）。",
     "★ でコピー・貼り付けなどのショートカットや、アプリ・サイトを開けます。",
     "マウスの右上の「片手操作」で、片手（1本指）だけで使える画面になります。「＜ 左手用」「＞ 右手用」で利き手を切り替えます。",
+    "上の「✎ 配置」で、ボタンの位置・大きさを変えたり、隠したり、好きなキー（F5、Ctrl+C、Alt+Tab など）を追加したりできます。",
   ]],
   padView: ["コントローラー", [
     "スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えます。",

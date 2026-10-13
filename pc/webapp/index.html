@@ -71,20 +71,35 @@
   .pad .dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(224,163,90,.33); pointer-events: none; }
   .btnbar { display: flex; gap: 6px; margin: 8px 0; }
   .btnbar button { flex: 1; min-height: 64px; font-size: 17px; border-radius: 14px; }
-  .typing .pad, .typing .btnbar, .typing .onehand { display: none; }
   /* 片手操作 */
-  .ohEnter { position: absolute; top: 8px; right: 8px; min-height: 34px; font-size: 12px; }
-  .onehand { flex: 1; min-height: 160px; margin: 8px 0; display: flex; gap: 6px; }
-  .onehand.left { flex-direction: row-reverse; }
-  .ohPad { flex: 7; position: relative; background: var(--surface); border-radius: 16px; touch-action: none; overflow: hidden; }
+  .ohPad { position: relative; background: var(--surface); border-radius: 16px; touch-action: none; overflow: hidden; }
   .ohPad .lab { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-weight: 700; font-size: 22px; color: rgba(241,235,228,.25); pointer-events: none; }
   .ohSub { position: absolute; left: 0; right: 0; top: calc(40% + 34px); text-align: center; font-size: 13px; color: var(--sub); pointer-events: none; }
-  .ohSwitch { position: absolute; top: 8px; left: 8px; min-height: 36px; font-size: 13px; }
-  .onehand.left .ohSwitch { left: auto; right: 8px; }
-  .ohCol { flex: 3; display: flex; flex-direction: column; gap: 6px; }
-  .ohCol button { flex: 1; min-height: 0; font-size: 14px; line-height: 1.2; border-radius: 14px; padding: 0 4px; }
   .ohPad .dot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: rgba(224,163,90,.33); pointer-events: none; }
   .typing .spacer { flex: 1; }
+  /* 自由に並べられる部品 (文字を打っている間は、上の決まった並びに切り替える) */
+  #kbView:not(.typing) #kbCard, #kbView:not(.typing) .spacer, .typing .stage { display: none; }
+  .stage { flex: 1; min-height: 0; position: relative; margin: 2px 0 8px; }
+  .stage .part { position: absolute; margin: 0; min-height: 0; }
+  .stage button.part { padding: 0 4px; font-size: 14px; line-height: 1.2; border-radius: 10px; overflow: hidden; }
+  .stage button.big { font-size: 17px; border-radius: 14px; }
+  .stage .part.nm { display: none; }
+  .stage .part.off { visibility: hidden; }
+  .fake { display: flex; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
+    color: var(--sub); font-size: 14px; overflow: hidden; white-space: nowrap; cursor: text; }
+  .mirrorPart { display: flex; flex-direction: column; padding: 6px; }
+  .mirrorPart .mirror { flex: 1; max-height: none; margin: 0; }
+  /* 配置を変えているとき */
+  .stage.editing .part { outline: 1.5px dashed rgba(169,157,145,.7); outline-offset: -1px; }
+  .stage.editing .part.off { visibility: visible; opacity: .3; }
+  .stage.editing .part.sel { outline: 2.5px solid var(--accent); opacity: 1; }
+  .stage.editing .part.sel.off { opacity: .55; }
+  .kbOverlay { position: absolute; inset: 0; z-index: 5; touch-action: none; }
+  .kbHandle { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; }
+  .kbHandle::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg); }
+  body.kbEditing .tabs { pointer-events: none; opacity: .35; }
+  #kbEditBar button { padding: 0 9px; }
+  #kbSel { flex: 1; min-width: 0; font-size: 13px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* コントローラー・画面 */
   canvas { display: block; touch-action: none; }
@@ -174,9 +189,14 @@
   <p>このページはQRコードから開いたときだけ使えます。</p>
 </div>
 
-<div class="top">
+<div class="top" id="topBar">
   <div class="status" id="status">接続しています…</div>
+  <button id="kbEdit">✎ 配置</button>
   <button id="helpBtn" aria-label="使い方">？ 使い方</button>
+</div>
+<div class="top" id="kbEditBar" hidden>
+  <div id="kbSel">部品をタップして選ぶ</div>
+  <button id="kbHide">隠す</button><button id="kbAdd">＋キー</button><button id="kbReset">初期配置</button><button id="kbDone" class="on">完了</button>
 </div>
 
 <main>
@@ -197,32 +217,35 @@
       <div class="keys fn" id="fnKeys" hidden></div>
     </div>
     <div class="spacer"></div>
-    <div class="pad" id="pad">
-      <div class="lab" id="padLab">マウス</div>
-      <div class="divider"></div>
-      <div class="half" style="left:0">左クリック</div>
-      <div class="half" style="right:0">右クリック</div>
-      <button class="ohEnter" id="ohEnter">片手操作</button>
-    </div>
-    <div class="onehand" id="oneHand" hidden>
+    <!-- 自由に並べられる部品 (位置は kblayout.js) -->
+    <div class="stage" id="stage">
+      <div class="pad" id="pad">
+        <div class="lab" id="padLab">マウス</div>
+        <div class="divider"></div>
+        <div class="half" style="left:0">左クリック</div>
+        <div class="half" style="right:0">右クリック</div>
+      </div>
       <div class="ohPad" id="ohPad">
         <div class="lab" id="ohLab">マウス（片手）</div>
         <div class="ohSub" id="ohSub">なぞる=移動　タップ=左クリック</div>
-        <button class="ohSwitch" id="ohHand"></button>
       </div>
-      <div class="ohCol">
-        <button id="ohExit" style="flex:.7;font-size:12px">片手をやめる</button>
-        <button id="ohUp" style="flex:1.2">▲<br>スクロール</button>
-        <button id="ohDown" style="flex:1.2">▼<br>スクロール</button>
-        <button id="ohRight">右クリック</button>
-        <button id="ohGrab">つかむ</button>
-        <button id="ohLeft" style="flex:1.6;font-size:17px">左クリック</button>
+      <div class="fake" id="fakeInput">ここをタップして入力（すぐPCへ送られます）</div>
+      <div class="card mirrorPart" id="mirrorPart">
+        <div class="field" id="mirrorTitle2">PCの入力欄</div>
+        <div class="mirror" id="mirror2"></div>
       </div>
-    </div>
-    <div class="btnbar">
-      <button id="mbL">左</button>
-      <button id="mbM">長押し</button>
-      <button id="mbR">右</button>
+      <button id="ohEnter" style="font-size:12px">片手操作</button>
+      <button id="mbL" class="big">左</button>
+      <button id="mbM" class="big">長押し</button>
+      <button id="mbR" class="big">右</button>
+      <button id="ohHand" style="font-size:13px"></button>
+      <button id="ohExit" style="font-size:12px">片手をやめる</button>
+      <button id="ohUp">▲<br>スクロール</button>
+      <button id="ohDown">▼<br>スクロール</button>
+      <button id="ohRight">右クリック</button>
+      <button id="ohGrab">つかむ</button>
+      <button id="ohLeft" class="big">左クリック</button>
+      <div class="kbOverlay" id="kbOverlay" hidden><div class="kbHandle" id="kbHandle" hidden></div></div>
     </div>
   </section>
 
@@ -294,6 +317,7 @@
     <h2>設定（このブラウザに保存）</h2>
     <div id="settings"></div>
     <div class="row" style="margin-top:10px"><button id="padReset">コントローラーの配置を初期に戻す</button></div>
+    <div class="row" style="margin-top:6px"><button id="kbResetAll">キーボード画面の配置を初期に戻す</button></div>
 
     <h2>このページについて</h2>
     <p class="note" id="aboutVer"></p>
@@ -321,6 +345,23 @@
       <div class="row"><button id="sfAdd" class="on">追加</button><button id="sfDefaults">最初の一覧に戻す</button></div>
       <p class="note">削除するときは、上の一覧のボタンを長押ししてください。</p>
     </div>
+  </div>
+</div></div>
+
+<div class="sheet" id="fnSheet" hidden><div>
+  <h3>ファンクションキーなど</h3>
+  <div class="keys fn" id="fnSheetKeys"></div>
+  <div class="row" style="margin-top:10px"><button id="fnSheetClose">閉じる</button></div>
+</div></div>
+
+<div class="sheet" id="ckSheet" hidden><div>
+  <h3>キーを追加</h3>
+  <div class="form">
+    <input type="text" id="ckLabel" placeholder="ボタンの名前（例: 更新、コピー）">
+    <input type="text" id="ckKeys" placeholder="キー（例: F5、Ctrl+C、Alt+Tab、Win+D）">
+    <input type="text" id="ckRun" placeholder="または開くアプリ・サイト（例: notepad、https://www.youtube.com）">
+    <div class="row"><button id="ckOk" class="on">追加</button><button id="ckCancel">やめる</button></div>
+    <p class="note">追加したボタンは画面の真ん中に出ます。動かして好きな場所に置いてください。消すときは、選んで「削除」を押します。</p>
   </div>
 </div></div>
 
@@ -375,6 +416,7 @@
 
 <script src="nacl-fast.min.js"></script>
 <script src="app.js"></script>
+<script src="kblayout.js"></script>
 <script src="pad.js"></script>
 <script src="screen.js"></script>
 </body>
