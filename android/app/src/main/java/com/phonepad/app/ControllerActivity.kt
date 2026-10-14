@@ -42,6 +42,12 @@ class ControllerActivity : Activity() {
         }
         setContentView(view)
         hideBars()
+        // 接続画面の「コントローラーの配置を変える」から開いたときは、すぐ配置の変更にする
+        if (intent.getBooleanExtra(EXTRA_EDIT, false)) view.post { view.startEditing() }
+    }
+
+    companion object {
+        const val EXTRA_EDIT = "edit"
     }
 
     private fun hideBars() {
@@ -738,7 +744,8 @@ class ControllerView(
         return areas.getOrNull(id.removePrefix("AREA:").toIntOrNull() ?: -1)
     }
 
-    private fun startEditing() {
+    fun startEditing() {
+        if (editing) return
         releaseAll()
         Link.send("GX")
         editing = true

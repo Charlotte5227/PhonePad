@@ -144,6 +144,30 @@ class ConnectActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(-1, dpi(48)).apply { topMargin = dpi(28) }
         })
 
+        // ---- PCにつながなくてもできること ----
+        root.addView(label(this, "PCにつながなくてもできること", 15f, C.INK, true).apply {
+            setPadding(0, dpi(28), 0, dpi(4))
+        })
+        root.addView(label(this, "配置や設定は、このスマホに保存されます。PCの電源が入っていなくても変えておけます。", 13f, C.SUB).apply {
+            setPadding(0, 0, 0, dpi(8))
+        })
+        fun offlineBtn(t: String, f: () -> Unit) = root.addView(KeyButton(this, t, 14f).apply { onTap = f },
+            LinearLayout.LayoutParams(-1, dpi(48)).apply { bottomMargin = dpi(6) })
+        offlineBtn("⌨ キーボード・マウスの配置を変える") {
+            startActivity(Intent(this, RemoteActivity::class.java).putExtra(RemoteActivity.EXTRA_EDIT, true))
+            finish()
+        }
+        offlineBtn("🎮 コントローラーの配置を変える") {
+            // 戻るとキーボード画面になるように、下にキーボード画面を置いておく
+            startActivities(arrayOf(
+                Intent(this, RemoteActivity::class.java),
+                Intent(this, ControllerActivity::class.java).putExtra(ControllerActivity.EXTRA_EDIT, true),
+            ))
+            finish()
+        }
+        offlineBtn("★ ショートカットを編集") { ShortcutPanel(this).show() }
+        offlineBtn("⚙ 設定") { startActivity(Intent(this, SettingsActivity::class.java)) }
+
         setContentView(scroll)
     }
 

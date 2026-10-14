@@ -79,6 +79,8 @@ class RemoteActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mods = Modifiers { refreshMods() }
         buildUi()
+        // 接続画面の「キーボード画面の配置を変える」から開いたときは、すぐ配置の変更にする
+        if (intent.getBooleanExtra(EXTRA_EDIT, false)) stage.post { setEditing(true) }
     }
 
     override fun onStart() {
@@ -774,6 +776,7 @@ class RemoteActivity : Activity() {
     }
 
     companion object {
+        const val EXTRA_EDIT = "edit"
         val KEYS1 = listOf("esc" to "Esc", "tab" to "Tab", "ctrl" to "Ctrl", "shift" to "Shift", "alt" to "Alt", "win" to "Win", "fn" to "Fn")
         val KEYS2 = listOf("left" to "←", "up" to "↑", "down" to "↓", "right" to "→", "bksp" to "⌫", "del" to "Del", "enter" to "⏎")
         val KEY_NAMES = mapOf("esc" to "ESC", "tab" to "TAB", "left" to "LEFT", "up" to "UP", "down" to "DOWN", "right" to "RIGHT", "del" to "DEL")
