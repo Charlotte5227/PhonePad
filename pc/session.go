@@ -62,6 +62,13 @@ func (s *server) handleConn(c net.Conn) {
 		s.addFail(ip)
 		ss.send("NG code")
 		log.Printf("接続拒否 (コード不一致): %s", ip)
+		name := ""
+		if len(f) >= 3 {
+			if b, err := base64.StdEncoding.DecodeString(f[2]); err == nil {
+				name = truncate(string(b), 60)
+			}
+		}
+		s.hist.add("reject", name, ip, "")
 		return
 	}
 	ss.deviceName = "スマホ"
@@ -83,16 +90,20 @@ func (s *server) handleConn(c net.Conn) {
 	s.sessions[ss] = struct{}{}
 	s.mu.Unlock()
 	log.Printf("接続しました: %s (%s)", ss.deviceName, ip)
+	s.hist.add("connect", ss.deviceName, ip, "")
+	guiRefresh()
 
 	defer func() {
 		ss.releaseAll()
 		if ss.pad != nil {
 			ss.pad.close()
 		}
+		s.hist.add("disconnect", ss.deviceName, ip, durText(time.Since(ss.since)))
 		s.mu.Lock()
 		delete(s.sessions, ss)
 		s.mu.Unlock()
 		log.Printf("切断しました: %s (%s)", ss.deviceName, ip)
+		guiRefresh()
 	}()
 
 	for {
@@ -178,6 +189,7 @@ func (ss *session) handleLine(line string) {
 	case "PW": // 電源操作
 		if len(f) >= 2 {
 			log.Printf("電源操作: %s (%s)", f[1], ss.deviceName)
+			ss.srv.hist.add("power", ss.deviceName, ss.remoteIP, f[1])
 			if err := powerAction(f[1]); err != nil {
 				ss.send("ER " + base64.StdEncoding.EncodeToString([]byte(err.Error())))
 			}
@@ -191,7 +203,7 @@ func (ss *session) handleLine(line string) {
 
 	case "SP": // PCに接続用の画面 (QRコードなど) を表示する
 		log.Printf("スマホからPCの画面を表示 (%s)", ss.deviceName)
-		openURL(fmt.Sprintf("http://127.0.0.1:%d/", statusPort))
+		openManager()
 
 	case "AQ": // 自動起動の状態
 		ss.sendAutostart()

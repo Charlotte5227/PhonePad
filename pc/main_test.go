@@ -55,6 +55,7 @@ func TestProtocol(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "TESTPC"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +137,7 @@ func TestAudioAndAbs(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	a, b := net.Pipe()
 	go s.handleConn(a)
 	br := bufio.NewReader(b)
@@ -172,6 +174,7 @@ func TestScreenAuth(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	ts := httptest.NewServer(s.screenMux())
 	defer ts.Close()
 	get := func(code string) (int, string, int) {
@@ -199,6 +202,7 @@ func TestTLSFingerprint(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	if len(s.certFP) != 64 {
 		t.Fatalf("fingerprint: %q", s.certFP)
 	}
@@ -265,6 +269,7 @@ func TestFieldClipPowerAutostartRumble(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	a, b := net.Pipe()
 	go s.handleConn(a)
 	br := bufio.NewReader(b)
@@ -340,6 +345,7 @@ func TestAudioStream(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ln.Close()
 	go func() {
@@ -381,6 +387,7 @@ func TestDeviceListKick(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	a, b := net.Pipe()
 	go s.handleConn(a)
 	br := bufio.NewReader(b)
@@ -536,6 +543,7 @@ func TestWebApp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
 	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
 	ts := httptest.NewServer(s.webMux())
 	defer ts.Close()
 
@@ -651,5 +659,82 @@ func TestWebApp(t *testing.T) {
 	s.mu.Unlock()
 	if fails == 0 {
 		t.Fatal("wrong key not counted as failure")
+	}
+}
+
+// テストの終わりに、切断の後始末 (履歴の書き込み) が終わるのを待つ
+func waitNoSessions(s *server) {
+	for i := 0; i < 300; i++ {
+		s.mu.Lock()
+		n := len(s.sessions)
+		s.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// 接続・拒否・電源操作・PCからの切断が履歴に残り、画面から読めること
+func TestHistory(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
+
+	// 違うコード → 拒否
+	a0, b0 := net.Pipe()
+	go s.handleConn(a0)
+	go b0.Write([]byte("HELLO 000000x " + base64.StdEncoding.EncodeToString([]byte("Bad")) + " 1\n"))
+	bufio.NewReader(b0).ReadString('\n')
+	b0.Close()
+
+	a, b := net.Pipe()
+	go s.handleConn(a)
+	br := bufio.NewReader(b)
+	go b.Write([]byte("HELLO " + s.code() + " " + base64.StdEncoding.EncodeToString([]byte("Pixel")) + " 1\n"))
+	if l, _ := br.ReadString('\n'); !strings.HasPrefix(l, "OK") {
+		t.Fatal(l)
+	}
+	go io.Copy(io.Discard, br)
+	b.Write([]byte("PW MONOFF\n"))
+	ts := httptest.NewServer(s.statusMux())
+	defer ts.Close()
+	if r, err := http.Post(ts.URL+"/api/kickall", "text/plain", nil); err != nil || r.StatusCode != 204 {
+		t.Fatalf("kickall: %v %v", err, r)
+	}
+	waitNoSessions(s)
+
+	r, err := http.Get(ts.URL + "/api/history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []histEntry
+	json.NewDecoder(r.Body).Decode(&list)
+	r.Body.Close()
+	var kinds []string
+	for _, e := range list {
+		kinds = append(kinds, e.Kind)
+	}
+	// 新しい順
+	want := []string{"disconnect", "kick", "power", "connect", "reject"}
+	if strings.Join(kinds, ",") != strings.Join(want, ",") {
+		t.Fatalf("kinds: %v", kinds)
+	}
+	if list[2].Detail != "MONOFF" || list[3].Device != "Pixel" || list[4].Device != "Bad" {
+		t.Fatalf("entries: %+v", list)
+	}
+	// 次に起動したときも残っている
+	s2 := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s2.loadConfig()
+	if len(s2.hist.all()) != 5 {
+		t.Fatalf("reload: %d", len(s2.hist.all()))
+	}
+	// 消す
+	if r, err := http.Post(ts.URL+"/api/history?clear=1", "text/plain", nil); err != nil || r.StatusCode != 204 {
+		t.Fatalf("clear: %v", err)
+	}
+	if len(s.hist.all()) != 0 {
+		t.Fatal("not cleared")
 	}
 }

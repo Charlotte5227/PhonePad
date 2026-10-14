@@ -87,6 +87,6 @@ func selfUpdate(url string) error {
 	}
 	// 新しい方がポートを使えるように終わる
 	time.Sleep(300 * time.Millisecond)
-	os.Exit(0)
+	appExit(0)
 	return nil
 }

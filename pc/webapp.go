@@ -33,6 +33,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,7 +42,15 @@ import (
 	"phonepad/internal/nacl/secretbox"
 )
 
-const webPort = 47806
+// ブラウザ版のポート (試験用に PHONEPAD_WEB_PORT で変えられる)
+var webPort = envPort("PHONEPAD_WEB_PORT", 47806)
+
+func envPort(name string, def int) int {
+	if n, err := strconv.Atoi(os.Getenv(name)); err == nil && n > 0 && n < 65536 {
+		return n
+	}
+	return def
+}
 
 //go:embed webapp
 var webappFS embed.FS

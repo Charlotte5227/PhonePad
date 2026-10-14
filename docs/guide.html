@@ -97,7 +97,7 @@
     <p class="lead">画面ごとの使い方と、指の動かし方をまとめました。写真はブラウザ版（iPhone）のものです。Android のアプリ版も、操作の方法は同じです（ボタンの置き場所の違いは<a href="#app-web">こちら</a>）。</p>
     <nav class="toc" aria-label="目次">
       <a href="#start">はじめに</a><a href="#kb">キーボードとマウス</a><a href="#pad">コントローラー</a>
-      <a href="#screen">PCの画面</a><a href="#more">★・音・電源</a><a href="#app-web">アプリ版とブラウザ版</a><a href="#faq">困ったとき</a>
+      <a href="#screen">PCの画面</a><a href="#more">★・音・電源</a><a href="#app-web">アプリ版とブラウザ版</a><a href="#pcapp">PC側の画面</a><a href="#faq">困ったとき</a>
     </nav>
   </header>
 
@@ -105,7 +105,7 @@
     <h2 id="h-start">はじめに</h2>
     <p class="sub">スマホとPCを同じWi-Fiにつないでおきます。</p>
     <ol class="steps">
-      <li>PCで PhonePad.exe を起動すると、ブラウザに接続用の画面が開きます。</li>
+      <li>PCで PhonePad.exe を起動すると、PhonePad の画面が開きます（画面を閉じても、タスクバー右下のアイコンで動き続けます）。</li>
       <li><b>Android</b>: PhonePad アプリを開いて「QRコードで接続」を押し、PCの画面の大きいQRコードを読み取ります。<br>
         <b>iPhone</b>: カメラで「iPhone・ブラウザで使う」のQRコードを読み取り、黄色い「Safari で開く」を押します。</li>
       <li>2回目からは、開くだけで自動でつながります。iPhone は Safari の共有ボタン →「ホーム画面に追加」しておくと便利です。</li>
@@ -239,6 +239,17 @@
       </tbody>
     </table></div>
     <p>ブラウザ版でできないこと・劣るところは<a href="./#h-web">トップページ</a>にまとめています。</p>
+  </section>
+
+  <section id="pcapp" aria-labelledby="h-pcapp">
+    <h2 id="h-pcapp">PC側の画面</h2>
+    <p class="sub">PhonePad.exe を起動すると開く画面です。閉じても PhonePad はタスクバー右下（通知領域）のアイコンで動き続け、アイコンをクリックするとまた開けます。終了はアイコンを右クリック →「PhonePad を終了」です。</p>
+    <dl class="keys">
+      <dt>つなぐ</dt><dd>接続用のQRコード、iPhone 用のQRコード、Android アプリを入れるためのQRコード</dd>
+      <dt>接続中・履歴</dt><dd>いま接続中のスマホ（ここから切断できます）と、接続・切断・拒否した接続・電源操作の記録。知らないスマホがあったら、切断して「設定」→「接続コードを変更」を押してください</dd>
+      <dt>設定</dt><dd>Windows の起動時に自動で起動する、接続中の表示、接続コードの変更、更新の確認、終了</dd>
+      <dt>接続中の表示</dt><dd>スマホがつながっている間は、画面の右下に「スマホが接続中」と小さく出ます。「切断」ですべてのスマホを切断できます。スマホに映すPCの画面には写りません</dd>
+    </dl>
   </section>
 
   <section id="faq" aria-labelledby="h-faq">

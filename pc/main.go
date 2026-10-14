@@ -41,6 +41,10 @@ type config struct {
 	Code   string `json:"code"`
 	Port   int    `json:"port"`
 	WebKey string `json:"webKey"` // ブラウザ版の暗号化の鍵 (QRコードにだけ載せる)
+	// 画面の隅の「スマホが接続中」の表示を出さない
+	HideOverlay bool `json:"hideOverlay,omitempty"`
+	// 通知領域で動いていることを一度お知らせした
+	TrayTipShown bool `json:"trayTipShown,omitempty"`
 }
 
 type server struct {
@@ -53,6 +57,7 @@ type server struct {
 	sessions map[*session]struct{}
 	nextID   int
 	fails    map[string][]time.Time
+	hist     *history
 }
 
 // --background: Windows起動時の自動起動用。ウィンドウもブラウザも開かずに動く
@@ -60,15 +65,22 @@ var background bool
 
 func main() {
 	afterUpdate := false
+	console := false
 	for _, a := range os.Args[1:] {
 		switch a {
 		case "--background":
 			background = true
 		case "--after-update":
 			afterUpdate = true
+		case "--console":
+			console = true // 調べもの用: 記録を黒いウィンドウにも出す
 		}
 	}
-	hasConsole := setupConsole(background)
+	// v2 からは黒いウィンドウを出さず、通知領域 (タスクバー右下) のアイコンで動く
+	hasConsole := false
+	if console {
+		hasConsole = setupConsole(false)
+	}
 	setupDPI()
 	log.SetFlags(log.Ldate | log.Ltime)
 	setupLogFile(hasConsole)
@@ -98,9 +110,8 @@ func main() {
 		// すでに起動している: そちらの画面を開いて終わる
 		log.Println("すでに起動しています:", err)
 		if !background {
-			fmt.Println("PhonePad はすでに起動しています。ブラウザに画面を表示します。")
-			openURL(fmt.Sprintf("http://127.0.0.1:%d/", statusPort))
-			time.Sleep(2500 * time.Millisecond)
+			openManager()
+			time.Sleep(1500 * time.Millisecond)
 		}
 		return
 	}
@@ -117,23 +128,32 @@ func main() {
 	go s.runAudioServer()
 	go s.runWebApp()
 	initGamepadSystem()
+	startGUI(s)
 
 	fmt.Printf(" PC名      : %s\n", s.pcName)
 	fmt.Printf(" 接続コード: %s\n", s.code())
 	fmt.Printf(" IPアドレス: %s (ポート %d)\n", strings.Join(localIPv4s(), ", "), s.cfg.Port)
 	fmt.Printf(" コントローラー: %s\n", gamepadStatusText())
 	fmt.Println("----------------------------------------------")
-	fmt.Println(" ブラウザにQRコードを表示しました。")
-	fmt.Println(" スマホのPhonePadアプリで読み取ってください。")
-	fmt.Println(" 終了するときはこのウィンドウを閉じてください。")
+	fmt.Println(" PhonePad の画面を開きました。")
+	fmt.Println(" 終了するときは、タスクバー右下の PhonePad のアイコンを右クリック →「終了」")
 	fmt.Println("----------------------------------------------")
 
 	if background {
 		log.Println("自動起動しました (ウィンドウなし)")
 	} else {
-		time.AfterFunc(300*time.Millisecond, func() {
-			openURL(fmt.Sprintf("http://127.0.0.1:%d/", statusPort))
-		})
+		time.AfterFunc(300*time.Millisecond, openManager)
+		// 初めてのときは、通知領域で動いていることを知らせる
+		s.mu.Lock()
+		first := !s.cfg.TrayTipShown
+		s.cfg.TrayTipShown = true
+		s.saveConfig()
+		s.mu.Unlock()
+		if first {
+			time.AfterFunc(1500*time.Millisecond, func() {
+				guiBalloon("PhonePad は右下で動いています", "画面を閉じても動き続けます。アイコンをクリックすると画面を開けます。終了は右クリック →「終了」です。")
+			})
+		}
 	}
 
 	for {
@@ -205,6 +225,7 @@ func (s *server) loadConfig() {
 		s.cfg.WebKey = newWebKey()
 	}
 	s.saveConfig()
+	s.hist = newHistory(dir)
 	if c, fp, err := loadOrCreateCert(dir); err == nil {
 		s.cert, s.certFP = c, fp
 	} else {
@@ -290,6 +311,11 @@ func (s *server) statusMux() *http.ServeMux {
 	sub, _ := fs.Sub(webFS, "web")
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.FS(sub)))
+	mux.HandleFunc("/favicon.png", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := webappFS.ReadFile("webapp/icon-180.png")
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(b)
+	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		type devInfo struct {
 			ID    int    `json:"id"`
@@ -330,6 +356,8 @@ func (s *server) statusMux() *http.ServeMux {
 			"siteURL":       siteURL,
 			"webURL":        s.webURL(ips),
 			"background":    background,
+			"overlay":       !s.cfg.HideOverlay,
+			"tray":          guiAvailable(),
 		})
 	})
 	mux.HandleFunc("/api/newcode", func(w http.ResponseWriter, r *http.Request) {
@@ -346,6 +374,7 @@ func (s *server) statusMux() *http.ServeMux {
 			ss.conn.Close()
 		}
 		s.mu.Unlock()
+		s.hist.add("newcode", "", "", "")
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// 接続中のスマホを切断する (スマホは自動でつなぎ直さない)
@@ -367,9 +396,36 @@ func (s *server) statusMux() *http.ServeMux {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		log.Printf("PCの画面から切断: %s (%s)", target.deviceName, target.remoteIP)
-		target.send("BYE")
-		time.AfterFunc(300*time.Millisecond, func() { target.conn.Close() })
+		s.kick(target)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// 接続中のスマホを全部切断する
+	mux.HandleFunc("/api/kickall", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		s.kickAll()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// 接続の履歴
+	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Query().Get("clear") == "1" {
+			s.hist.clear()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(s.hist.all())
+	})
+	// 画面の隅の「スマホが接続中」の表示
+	mux.HandleFunc("/api/overlay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		s.setOverlay(r.URL.Query().Get("on") == "1")
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/api/install-driver", func(w http.ResponseWriter, r *http.Request) {
@@ -427,7 +483,7 @@ func (s *server) statusMux() *http.ServeMux {
 		w.WriteHeader(http.StatusNoContent)
 		go func() {
 			time.Sleep(200 * time.Millisecond)
-			os.Exit(0)
+			appExit(0)
 		}()
 	})
 	mux.HandleFunc("/api/retry-gamepad", func(w http.ResponseWriter, r *http.Request) {
@@ -519,6 +575,62 @@ func localIPv4s() []string {
 		out = []string{"127.0.0.1"}
 	}
 	return out
+}
+
+// 終わる (通知領域のアイコンを消してから)
+func appExit(code int) {
+	guiShutdown()
+	os.Exit(code)
+}
+
+// PCの画面から切断する (スマホは自動でつなぎ直さない)
+func (s *server) kick(ss *session) {
+	log.Printf("PCの画面から切断: %s (%s)", ss.deviceName, ss.remoteIP)
+	s.hist.add("kick", ss.deviceName, ss.remoteIP, "")
+	ss.send("BYE")
+	time.AfterFunc(300*time.Millisecond, func() { ss.conn.Close() })
+}
+
+func (s *server) kickAll() {
+	s.mu.Lock()
+	var list []*session
+	for ss := range s.sessions {
+		list = append(list, ss)
+	}
+	s.mu.Unlock()
+	for _, ss := range list {
+		s.kick(ss)
+	}
+}
+
+// 接続中のスマホの名前 (つないだ順)
+func (s *server) connectedNames() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := make([]*session, 0, len(s.sessions))
+	for ss := range s.sessions {
+		list = append(list, ss)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].id < list[j].id })
+	names := make([]string, len(list))
+	for i, ss := range list {
+		names[i] = ss.deviceName
+	}
+	return names
+}
+
+func (s *server) overlayOn() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.cfg.HideOverlay
+}
+
+func (s *server) setOverlay(on bool) {
+	s.mu.Lock()
+	s.cfg.HideOverlay = !on
+	s.saveConfig()
+	s.mu.Unlock()
+	guiRefresh()
 }
 
 func waitEnter() {
