@@ -312,11 +312,18 @@ const Ed = (() => {
     for (const c of custom) L[c.id] = (c.rect || R(.35, .45, .3, .07)).slice();
     return L;
   }
+  // 名前の前の絵文字 (「🔊 音量・音」の「🔊」)。絵文字のないボタンは null
+  function iconOf(c) {
+    const l = c.l || "", i = l.indexOf(" ");
+    if (i <= 0 || !l.slice(i + 1).trim()) return null;
+    const t = l.slice(0, i);
+    return c.f || /\p{So}|\p{Extended_Pictographic}/u.test(t) ? t : null;
+  }
   function kbLabel(id, mode, custom) {
     if (id === "stickMode") return mode.startsWith("stick") ? "マウス操作" : "スティック操作";
     if (id === "hand") return mode.startsWith("oneL") ? "＞ 右手用" : "＜ 左手用";
     const c = custom.find((c) => c.id === id);
-    if (c) return c.l;
+    if (c) return c.io && iconOf(c) ? iconOf(c) : c.l;
     return KB_LABEL[id] || id;
   }
 
@@ -387,11 +394,17 @@ const Ed = (() => {
       if (!sel || !L[sel]) {
         side.append(el("p", { class: "note", text: "部品を押して選び、ドラッグで動かします。右下の丸をドラッグすると大きさが変わります。" }));
       } else {
-        side.append(el("h3", { text: kbLabel(sel, mode, custom) }));
+        side.append(el("h3", { text: c ? c.l : kbLabel(sel, mode, custom) }));
         const r = L[sel];
         if (c) {
           side.append(el("p", { class: "note", text: c.f ? "お気に入り（押すとこの機能が開きます）" : describe(c) }),
-            el("div", { class: "actions" }, el("button", { class: "danger", text: "このキーを削除", onclick: () => {
+            el("div", { class: "actions" },
+              // 絵文字のあるボタン: 絵文字だけにする・名前も出す
+              iconOf(c) ? el("button", { text: c.io ? "名前も表示する" : "絵文字だけにする", onclick: () => {
+                if (c.io) delete c.io; else c.io = 1;
+                customChanged = true; bar.dirty = true; render();
+              } }) : null,
+              el("button", { class: "danger", text: "このキーを削除", onclick: () => {
               if (!confirm("「" + c.l + "」を削除しますか？（全部の画面から消えます）")) return;
               custom = custom.filter((x) => x !== c);
               for (const L2 of Object.values(layouts)) delete L2[c.id];

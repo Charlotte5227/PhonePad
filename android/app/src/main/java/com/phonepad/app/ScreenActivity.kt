@@ -197,8 +197,9 @@ class ScreenActivity : Activity() {
         }
         screenFrame.addView(barScroll, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
         this.barScroll = barScroll
-        // 横向きでは、上のボタンを「☰」にしまう (押すと出る。画面に触れるとしまう)
-        menuBtn = KeyButton(this, "☰", 18f).apply {
+        // 横向きでは、上のボタンを「＞」にしまう (押すと出て「＜」になる。画面に触れるとしまう)
+        menuBtn = KeyButton(this, "＞", 18f).apply {
+            contentDescription = "ボタンを出す"
             alpha = 0.8f
             visibility = View.GONE
             onTap = { setMenuOpen(!menuOpen) }
@@ -281,6 +282,8 @@ class ScreenActivity : Activity() {
             else -> View.VISIBLE
         }
         menuBtn.active = if (land && menuOpen) 1 else 0
+        menuBtn.text = if (land && menuOpen) "＜" else "＞"
+        menuBtn.contentDescription = if (land && menuOpen) "ボタンをしまう" else "ボタンを出す"
     }
 
     private fun setMenuOpen(open: Boolean) {

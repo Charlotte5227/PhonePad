@@ -120,7 +120,7 @@
   .keyrow button { flex: none; min-width: 46px; min-height: 40px; font-size: 14px; padding: 0 8px; border-radius: 10px; }
   .scrPanel .inrow button { flex: none; }
   .typingScr .scrbar { display: none; }
-  /* 横向き: ボタンは「☰」1つにしまい、押すと縦に並べて出す */
+  /* 横向き: ボタンは「＞」1つにしまい、押すと縦に並べて出す (出ている間は「＜」) */
   #scrMenu { display: none; }
   .land .scrbar { flex-direction: column; align-items: flex-start; right: auto; overflow: visible; max-height: calc(100% - 12px); }
   .land #scrMenu { display: block; width: 44px; padding: 0; font-size: 18px; opacity: .8; }
@@ -209,6 +209,7 @@
   .pagehead h1 { flex: 1; font-size: 19px; margin: 0; }
   .pagehead button { min-height: 38px; font-size: 13px; }
   .stage button.favkey { font-size: 12px; }
+  .stage button.iconOnly { font-size: 22px; padding: 0; }
   .scrbar #scrDrawer { font-size: 20px; width: 44px; padding: 0; }
 
   /* PCから届いたもの (ページ・ファイル) */
@@ -248,7 +249,7 @@
 </div>
 <div class="top" id="kbEditBar" hidden>
   <div id="kbSel">部品をタップして選ぶ</div>
-  <button id="kbHide">隠す</button><button id="kbAdd">＋キー</button><button id="kbReset">初期配置</button><button id="kbDone" class="on">完了</button>
+  <button id="kbHide">隠す</button><button id="kbIcon" hidden>絵だけ</button><button id="kbAdd">＋キー</button><button id="kbReset">初期配置</button><button id="kbDone" class="on">完了</button>
 </div>
 
 <main>
@@ -318,7 +319,7 @@
     <div class="scrArea" id="scrArea">
       <canvas id="scrCanvas"></canvas>
       <div class="scrbar" id="scrBar">
-        <button id="scrMenu" aria-label="ボタンを出す">☰</button>
+        <button id="scrMenu" aria-label="ボタンを出す">＞</button>
         <button id="scrDrawer" aria-label="メニュー">≡</button>
         <button id="scrCtrl"></button>
         <button id="scrQual"></button>

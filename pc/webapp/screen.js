@@ -168,19 +168,24 @@
   function sendMove(x, y) { const p = toPc(x, y); if (!p) return false; Link.send("MA " + p[0] + " " + p[1]); return true; }
   function noteTap(x, y) { const p = toPc(x, y); if (p) { lastU = p[0] / 65535; lastV = p[1] / 65535; } }
 
-  // 横向きでは、上のボタンを「☰」にしまう
+  // 横向きでは、上のボタンを「＞」にしまう (押すと出て「＜」になる)
   const bar = document.getElementById("scrBar");
   const menuBtn = document.getElementById("scrMenu");
+  function setOpen(open) {
+    bar.classList.toggle("open", open);
+    menuBtn.textContent = open ? "＜" : "＞";
+    menuBtn.setAttribute("aria-label", open ? "ボタンをしまう" : "ボタンを出す");
+  }
   // ≡ のメニュー
   document.getElementById("scrDrawer").onclick = () => Menu.open();
-  menuBtn.onclick = () => bar.classList.toggle("open");
-  // 他のボタンを押したら閉じる (☰ 自身と、続けて押すことが多い「画質」は除く)
+  menuBtn.onclick = () => setOpen(!bar.classList.contains("open"));
+  // 他のボタンを押したら閉じる (＞ 自身と、続けて押すことが多い「画質」は除く)
   bar.addEventListener("click", (e) => {
-    if (e.target !== menuBtn && e.target.id !== "scrQual" && e.target.tagName === "BUTTON") setTimeout(() => bar.classList.remove("open"), 150);
+    if (e.target !== menuBtn && e.target.id !== "scrQual" && e.target.tagName === "BUTTON") setTimeout(() => setOpen(false), 150);
   });
   function setLand(on) {
     view.classList.toggle("land", on);
-    if (!on) bar.classList.remove("open");
+    if (!on) setOpen(false);
   }
 
   function resize() {
@@ -242,7 +247,7 @@
 
   cv.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    bar.classList.remove("open");
+    if (bar.classList.contains("open")) setOpen(false);
     cv.setPointerCapture(e.pointerId);
     const p = pos(e);
     pts.set(e.pointerId, p);

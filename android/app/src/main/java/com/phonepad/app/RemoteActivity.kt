@@ -18,7 +18,21 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** キーボードに自分で追加したキー (rect は最初に置く位置) */
-class CustomKey(val id: String, val sc: Shortcut, val rect: FloatArray, val feature: String = "")
+class CustomKey(val id: String, val sc: Shortcut, val rect: FloatArray, val feature: String = "", var iconOnly: Boolean = false) {
+    /** 名前の前の絵文字 (「🔊 音量・音」の「🔊」)。絵文字のないボタンは null */
+    val icon: String?
+        get() {
+            val l = sc.label
+            val i = l.indexOf(' ')
+            if (i <= 0 || l.substring(i + 1).isBlank()) return null
+            val t = l.substring(0, i)
+            if (feature.isNotEmpty()) return t
+            return if (t.codePoints().anyMatch { Character.getType(it) == Character.OTHER_SYMBOL.toInt() }) t else null
+        }
+
+    /** ボタンに出す文字 (「絵文字だけ」にしていれば絵文字だけ) */
+    val shown: String get() = if (iconOnly) icon ?: sc.label else sc.label
+}
 
 /**
  * キーボード + マウス(トラックパッド/スティック/片手) 画面。
@@ -51,6 +65,7 @@ class RemoteActivity : Activity() {
     private lateinit var editBar: LinearLayout
     private lateinit var selLabel: TextView
     private lateinit var hideBtn: KeyButton
+    private lateinit var iconBtn: KeyButton
     private lateinit var fnPanel: GridLayout
     private val modButtons = HashMap<Int, MutableList<KeyButton>>()
     private val stageMods = ArrayList<Pair<Int, KeyButton>>()
@@ -220,6 +235,9 @@ class RemoteActivity : Activity() {
         }
         hideBtn = btn("隠す") { hideSelected() }
         editBar.addView(hideBtn, LinearLayout.LayoutParams(-2, dpi(40)).apply { leftMargin = dpi(4) })
+        // 絵文字のあるボタンを選んだときだけ: 絵文字だけにする・名前も出す
+        iconBtn = btn("絵だけ") { toggleIconOnly() }
+        editBar.addView(iconBtn, LinearLayout.LayoutParams(-2, dpi(40)).apply { leftMargin = dpi(4) })
         editBar.addView(btn("＋キー") { addCustomKey() }, LinearLayout.LayoutParams(-2, dpi(40)).apply { leftMargin = dpi(4) })
         editBar.addView(btn("初期配置") { resetLayout() }, LinearLayout.LayoutParams(-2, dpi(40)).apply { leftMargin = dpi(4) })
         editBar.addView(btn("完了") { setEditing(false) }.apply { active = 2 },
@@ -243,6 +261,9 @@ class RemoteActivity : Activity() {
 
     private fun paintSel(p: FreeStage.Part?) {
         selLabel.text = p?.name ?: "部品をタップして選ぶ"
+        val c = p?.customId?.let { id -> customs.firstOrNull { it.id == id } }
+        iconBtn.visibility = if (c?.icon != null) View.VISIBLE else View.GONE
+        iconBtn.text = if (c?.iconOnly == true) "名前も" else "絵だけ"
         hideBtn.text = when {
             p == null -> "隠す"
             p.customId != null -> "削除"
@@ -278,6 +299,18 @@ class RemoteActivity : Activity() {
         stage.toggleHidden(id)
     }
 
+    /** 選んだボタンを、絵文字だけ ⇔ 絵文字と名前 に切り替える */
+    private fun toggleIconOnly() {
+        val id = stage.sel ?: return
+        val c = customs.firstOrNull { it.id == id } ?: return
+        if (c.icon == null) return
+        c.iconOnly = !c.iconOnly
+        saveCustoms()
+        buildStage()
+        stage.select(id)
+        toast(if (c.iconOnly) "絵文字だけにしました（「名前も」で戻せます）" else "名前も出すようにしました")
+    }
+
     private fun addCustomKey() {
         ShortcutPanel(this).editShortcut(null, "キーを追加") { sc ->
             val c = CustomKey("c" + System.currentTimeMillis().toString(36), sc, floatArrayOf(.35f, .45f, .3f, .07f, 0f))
@@ -310,7 +343,7 @@ class RemoteActivity : Activity() {
                 val o = a.getJSONObject(i)
                 val r = o.optJSONArray("rect")
                 val rect = FloatArray(5) { j -> if (r != null && j < r.length()) r.optDouble(j, 0.0).toFloat() else floatArrayOf(.35f, .45f, .3f, .07f, 0f)[j] }
-                out.add(CustomKey(o.getString("id"), Shortcut(o.optString("l"), o.optString("k"), o.optInt("m"), o.optString("r")), rect, o.optString("f")))
+                out.add(CustomKey(o.getString("id"), Shortcut(o.optString("l"), o.optString("k"), o.optInt("m"), o.optString("r")), rect, o.optString("f"), o.optInt("io") == 1))
             }
         } catch (_: Exception) {
         }
@@ -322,7 +355,10 @@ class RemoteActivity : Activity() {
         for (c in customs) {
             val r = JSONArray()
             c.rect.forEach { r.put(it.toDouble()) }
-            a.put(JSONObject().put("id", c.id).put("l", c.sc.label).put("k", c.sc.key).put("m", c.sc.mods).put("r", c.sc.run).put("rect", r).apply { if (c.feature.isNotEmpty()) put("f", c.feature) })
+            a.put(JSONObject().put("id", c.id).put("l", c.sc.label).put("k", c.sc.key).put("m", c.sc.mods).put("r", c.sc.run).put("rect", r).apply {
+                if (c.feature.isNotEmpty()) put("f", c.feature)
+                if (c.iconOnly) put("io", 1)
+            })
         }
         Prefs.kbCustom = a.toString()
     }
@@ -648,10 +684,10 @@ class RemoteActivity : Activity() {
         for (c in customs) {
             if (c.feature.isNotEmpty()) {
                 // お気に入り: その機能を開くボタン
-                stage.add(FreeStage.Part(c.id, key(c.sc.label, 13f) { hideIme(); Features.launch(this, c.feature) }.apply { maxLines = 2 },
+                stage.add(FreeStage.Part(c.id, key(c.shown, if (c.iconOnly) 20f else 13f) { hideIme(); Features.launch(this, c.feature) }.apply { maxLines = 2 },
                     "お気に入り「${c.sc.label}」", customId = c.id))
             } else {
-                stage.add(FreeStage.Part(c.id, key(c.sc.label, 13f) { sendCustom(c.sc) }.apply { maxLines = 2 },
+                stage.add(FreeStage.Part(c.id, key(c.shown, if (c.iconOnly) 20f else 13f) { sendCustom(c.sc) }.apply { maxLines = 2 },
                     "追加したキー「${c.sc.label}」", customId = c.id))
             }
         }

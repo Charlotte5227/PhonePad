@@ -83,17 +83,32 @@ const KbStage = (() => {
     if (c.r) Link.send("RUN " + b64(c.r));
     else Link.send("KY " + c.k + " " + (c.m | Mods.consume()));
   }
+  // 名前の前の絵文字 (「🔊 音量・音」の「🔊」)。絵文字のないボタンは null
+  function iconOf(c) {
+    const l = c.l || "", i = l.indexOf(" ");
+    if (i <= 0 || !l.slice(i + 1).trim()) return null;
+    const t = l.slice(0, i);
+    return c.f || /\p{So}|\p{Extended_Pictographic}/u.test(t) ? t : null;
+  }
+  // ボタンに出す文字 (「絵文字だけ」にしていれば絵文字だけ)
+  function paintCustom(c, el) {
+    const only = !!(c.io && iconOf(c));
+    el.textContent = only ? iconOf(c) : c.l;
+    el.classList.toggle("iconOnly", only);
+    if (only) el.setAttribute("aria-label", c.l); else el.removeAttribute("aria-label");
+  }
   function addCustomPart(c) {
     if (c.f) {
       // お気に入り: その機能を開くボタン (≡ のメニューの ☆ で置く)
       const el = document.createElement("button");
-      el.textContent = c.l;
       el.className = "favkey";
+      paintCustom(c, el);
       el.onclick = () => Menu.launch(c.f);
       addPart(c.id, el, "お気に入り「" + c.l + "」", "", { custom: c });
       return;
     }
     const el = keyButton(c.l, () => runCustom(c));
+    paintCustom(c, el);
     addPart(c.id, el, "追加したキー「" + c.l + "」", "", { custom: c });
   }
   custom.forEach(addCustomPart);
@@ -191,6 +206,10 @@ const KbStage = (() => {
     const p = sel && parts.get(sel);
     $("kbSel").textContent = p ? p.name : "部品をタップして選ぶ";
     $("kbHide").textContent = p && p.custom ? "削除" : p && L[sel][4] ? "表示" : "隠す";
+    // 絵文字のあるボタンを選んだときだけ: 絵文字だけにする・名前も出す
+    const ic = !!(p && p.custom && iconOf(p.custom));
+    $("kbIcon").hidden = !ic;
+    if (ic) $("kbIcon").textContent = p.custom.io ? "名前も" : "絵だけ";
     placeHandle();
   }
   function placeHandle() {
@@ -265,6 +284,15 @@ const KbStage = (() => {
     save();
     paintSel();
     updateMirrorVisibility();
+  };
+  $("kbIcon").onclick = () => {
+    const p = sel && parts.get(sel), c = p && p.custom;
+    if (!c || !iconOf(c)) return;
+    if (c.io) delete c.io; else c.io = 1;
+    store("kbCustom", custom);
+    paintCustom(c, p.el);
+    paintSel();
+    toast(c.io ? "絵文字だけにしました（「名前も」で戻せます）" : "名前も出すようにしました");
   };
   $("kbReset").onclick = () => {
     if (!confirm("この画面の配置を初期に戻しますか？（追加したキーも消えます）")) return;
