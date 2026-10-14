@@ -167,6 +167,7 @@ class ConnectActivity : Activity() {
         }
         offlineBtn("★ ショートカットを編集") { ShortcutPanel(this).show() }
         offlineBtn("⚙ 設定") { startActivity(Intent(this, SettingsActivity::class.java)) }
+        offlineBtn("≡ メニューの並び・お気に入り") { MenuDrawer(this).open() }
 
         setContentView(scroll)
     }

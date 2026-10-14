@@ -113,8 +113,10 @@ object Shortcuts {
     }
 }
 
-/** ★ パネル: ショートカット・クリップボード・電源 */
-class ShortcutPanel(private val act: Activity) {
+/** ★ ショートカット・PCの電源・クリップボード (メニューからそれぞれ開く) */
+class ShortcutPanel(private val act: Activity, private val part: Part = Part.SHORTCUTS) {
+    enum class Part { SHORTCUTS, POWER, CLIPBOARD }
+
     private val dialog = Dialog(act)
     private val list = Shortcuts.load()
     private var editing = false
@@ -132,7 +134,12 @@ class ShortcutPanel(private val act: Activity) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        head.addView(label(act, "★ ショートカット", 17f, C.INK, true), LinearLayout.LayoutParams(0, -2, 1f))
+        val title = when (part) {
+            Part.SHORTCUTS -> "★ ショートカット"
+            Part.POWER -> "⏻ PCの電源"
+            Part.CLIPBOARD -> "📋 クリップボード"
+        }
+        head.addView(label(act, title, 17f, C.INK, true), LinearLayout.LayoutParams(0, -2, 1f))
         editBtn = KeyButton(act, "編集", 13f).apply {
             setPadding(act.dpi(14), 0, act.dpi(14), 0)
             onTap = {
@@ -140,7 +147,7 @@ class ShortcutPanel(private val act: Activity) {
                 refresh()
             }
         }
-        head.addView(editBtn, LinearLayout.LayoutParams(-2, act.dpi(38)))
+        if (part == Part.SHORTCUTS) head.addView(editBtn, LinearLayout.LayoutParams(-2, act.dpi(38)))
         // 閉じるは上に置く (下に置くと、すぐ上の再起動などを押し間違えやすいため)
         head.addView(KeyButton(act, "✕ 閉じる", 13f).apply {
             setPadding(act.dpi(14), 0, act.dpi(14), 0)
@@ -148,38 +155,13 @@ class ShortcutPanel(private val act: Activity) {
         }, LinearLayout.LayoutParams(-2, act.dpi(38)).apply { leftMargin = act.dpi(6) })
         root.addView(head)
         hint = label(act, "", 12f, C.SUB).apply { setPadding(0, act.dpi(4), 0, act.dpi(4)) }
-        root.addView(hint)
-
         grid = GridLayout(act).apply { columnCount = 3 }
-        root.addView(grid)
-
-        // 電源
-        section(root, "PC")
-        root.addView(smallBtn("📊 PCの状態を見る") { StatusPanel(act).show() },
-            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { bottomMargin = act.dpi(6) })
-        root.addView(smallBtn("📎 ファイルをPCへ送る") {
-            dialog.dismiss()
-            act.startActivity(android.content.Intent(act, SendFileActivity::class.java))
-        }, LinearLayout.LayoutParams(-1, act.dpi(46)).apply { bottomMargin = act.dpi(6) })
-        val p1 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
-        p1.addView(smallBtn("🔒 ロック") { power("LOCK", null) }, weightLp())
-        p1.addView(smallBtn("画面オフ") { power("MONOFF", null) }, weightLp())
-        p1.addView(smallBtn("スリープ") { power("SLEEP", "PCをスリープしますか？") }, weightLp())
-        root.addView(p1)
-        val p2 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, act.dpi(6), 0, 0) }
-        p2.addView(smallBtn("再起動") { power("RESTART", "PCを再起動しますか？\n保存していない作業は失われます。") }, weightLp())
-        p2.addView(smallBtn("シャットダウン") { power("SHUTDOWN", "PCをシャットダウンしますか？\n保存していない作業は失われます。") }, weightLp())
-        root.addView(p2)
-
-        // クリップボード
-        section(root, "クリップボード")
-        val clip = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
-        clip.addView(smallBtn("スマホ → PC") { phoneToPc(false) }, weightLp())
-        clip.addView(smallBtn("PC → スマホ") { Link.send("CQ") }, weightLp())
-        root.addView(clip)
-        root.addView(smallBtn("スマホでコピーした内容をPCに貼り付け") { phoneToPc(true) },
-            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(6) })
-
+        if (part == Part.SHORTCUTS) {
+            root.addView(hint)
+            root.addView(grid)
+        }
+        if (part == Part.POWER) buildPower(root)
+        if (part == Part.CLIPBOARD) buildClipboard(root)
 
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
         dialog.setContentView(ScrollView(act).apply { addView(root) })
@@ -199,6 +181,40 @@ class ShortcutPanel(private val act: Activity) {
         }
         refresh()
         dialog.show()
+    }
+
+    private fun buildPower(root: LinearLayout) {
+        root.addView(label(act, "スリープ・再起動・シャットダウンは、押すと確認が出ます。", 12f, C.SUB).apply {
+            setPadding(0, act.dpi(4), 0, act.dpi(10))
+        })
+        val p1 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
+        p1.addView(smallBtn("🔒 ロック") { power("LOCK", null) }, weightLp())
+        p1.addView(smallBtn("画面オフ") { power("MONOFF", null) }, weightLp())
+        p1.addView(smallBtn("スリープ") { power("SLEEP", "PCをスリープしますか？") }, weightLp())
+        root.addView(p1)
+        val p2 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, act.dpi(6), 0, 0) }
+        p2.addView(smallBtn("再起動") { power("RESTART", "PCを再起動しますか？\n保存していない作業は失われます。") }, weightLp())
+        p2.addView(smallBtn("シャットダウン") { power("SHUTDOWN", "PCをシャットダウンしますか？\n保存していない作業は失われます。") }, weightLp())
+        root.addView(p2)
+        // 電源を入れる (Wake on LAN)
+        Prefs.target?.takeIf { it.mac.isNotEmpty() }?.let { t ->
+            root.addView(smallBtn("⏻ ${t.name} の電源を入れる") {
+                Wol.wake(t.mac, t.hosts.firstOrNull())
+                toast("電源を入れる合図を送りました。PCが起動すると自動でつながります。")
+            }, LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(14) })
+        }
+    }
+
+    private fun buildClipboard(root: LinearLayout) {
+        root.addView(label(act, "設定の「PCから受け取る」で、自動で共有することもできます。", 12f, C.SUB).apply {
+            setPadding(0, act.dpi(4), 0, act.dpi(10))
+        })
+        val clip = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
+        clip.addView(smallBtn("スマホ → PC") { phoneToPc(false) }, weightLp())
+        clip.addView(smallBtn("PC → スマホ") { Link.send("CQ") }, weightLp())
+        root.addView(clip)
+        root.addView(smallBtn("スマホでコピーした内容をPCに貼り付け") { phoneToPc(true) },
+            LinearLayout.LayoutParams(-1, act.dpi(46)).apply { topMargin = act.dpi(6) })
     }
 
     private fun toast(s: String) = Toast.makeText(act, s, Toast.LENGTH_SHORT).show()

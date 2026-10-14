@@ -84,6 +84,15 @@ const KbStage = (() => {
     else Link.send("KY " + c.k + " " + (c.m | Mods.consume()));
   }
   function addCustomPart(c) {
+    if (c.f) {
+      // お気に入り: その機能を開くボタン (≡ のメニューの ☆ で置く)
+      const el = document.createElement("button");
+      el.textContent = c.l;
+      el.className = "favkey";
+      el.onclick = () => Menu.launch(c.f);
+      addPart(c.id, el, "お気に入り「" + c.l + "」", "", { custom: c });
+      return;
+    }
     const el = keyButton(c.l, () => runCustom(c));
     addPart(c.id, el, "追加したキー「" + c.l + "」", "", { custom: c });
   }
@@ -234,7 +243,6 @@ const KbStage = (() => {
   ov.addEventListener("pointerup", endDrag);
   ov.addEventListener("pointercancel", endDrag);
 
-  $("kbEdit").onclick = () => setEditing(true);
   $("kbDone").onclick = () => setEditing(false);
   $("kbHide").onclick = () => {
     const p = sel && parts.get(sel);
@@ -316,11 +324,9 @@ const KbStage = (() => {
 
   // ---- 画面の切り替え ----
   Views.on("kbView", (on) => {
-    $("kbEdit").hidden = !on;
     if (!on && editing) setEditing(false);
     if (on) requestAnimationFrame(placeHandle);
   });
-  $("kbEdit").hidden = Views.current !== "kbView";
   // 向きが変わったら、その向きの配置にする
   window.addEventListener("resize", () => { if (!typing && !drag && modeNow() !== cur) refresh(); placeHandle(); });
   window.addEventListener("pp-resize", placeHandle);
@@ -338,5 +344,5 @@ const KbStage = (() => {
   });
 
   refresh();
-  return { refresh, reload, get editing() { return editing; } };
+  return { refresh, reload, edit() { setEditing(true); }, get editing() { return editing; } };
 })();

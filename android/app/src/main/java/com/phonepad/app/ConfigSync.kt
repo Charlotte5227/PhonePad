@@ -36,7 +36,7 @@ object ConfigSync {
     var onNotice: ((String) -> Unit)? = null
 
     val KB_MODES = listOf("tp", "stick", "oneR", "oneL")
-    private val KEYS = listOf("shortcuts", "kbCustom", "padLayout", "padAreas", "padPresets") + KB_MODES.map { "kbLayout.$it" }
+    private val KEYS = listOf("shortcuts", "kbCustom", "padLayout", "padAreas", "padPresets", "menuOrder") + KB_MODES.map { "kbLayout.$it" }
 
     fun isKey(k: String) = k in KEYS
 

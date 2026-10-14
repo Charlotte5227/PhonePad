@@ -11,9 +11,23 @@ import android.widget.SeekBar
 import android.widget.Switch
 import kotlin.math.roundToInt
 
-/** 設定画面 */
+/**
+ * 設定画面。メニューから項目ごとに開く (EXTRA_SECTION: mouse / kb / pad / screen / receive / other)。
+ * 項目を指定しないときは全部を並べる。
+ */
 class SettingsActivity : Activity() {
+    companion object {
+        const val EXTRA_SECTION = "section"
+        private val TITLES = mapOf(
+            "mouse" to "🖱 マウスの設定", "kb" to "⌨ キーボードの設定", "pad" to "🎮 コントローラーの設定",
+            "screen" to "🖥 PCの画面の設定", "receive" to "📥 PCから受け取る", "other" to "⚙ その他の設定",
+        )
+    }
+
     private lateinit var box: LinearLayout
+    private var only = ""
+    private fun show(sec: String) = only.isEmpty() || only == sec
+    private val drawer by lazy { MenuDrawer(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,13 +50,16 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        only = intent.getStringExtra(EXTRA_SECTION) ?: ""
+        head.addView(KeyButton(this, "≡", 22f).apply { onTap = { drawer.open() } }, LinearLayout.LayoutParams(dpi(48), dpi(40)))
+        head.addView(label(this, "　" + (TITLES[only] ?: "設定"), 19f, C.INK, true), LinearLayout.LayoutParams(0, -2, 1f))
         head.addView(KeyButton(this, "← 戻る", 14f).apply {
             setPadding(dpi(14), 0, dpi(14), 0)
             onTap = { finish() }
         }, LinearLayout.LayoutParams(-2, dpi(40)))
-        head.addView(label(this, "　設定", 20f, C.INK, true))
         box.addView(head)
 
+        if (show("mouse")) {
         section("マウス")
         slider("マウスの速さ", 0.3f, 4f, Prefs.mouseSpeed, 1) { Prefs.mouseSpeed = it }
         slider("マウスの加速（速く動かすほど遠くへ）", 0f, 1.5f, Prefs.mouseAccel, 1) { Prefs.mouseAccel = it }
@@ -52,7 +69,12 @@ class SettingsActivity : Activity() {
         toggle("マウスのスティックを触れた位置に出す（オフ: 真ん中に固定）", Prefs.mouseStickFloating) {
             Prefs.mouseStickFloating = it
         }
+        toggle("マウスを片手操作にする（キーボード画面のボタンを隠してしまったときも、ここで切り替えられます）", Prefs.oneHand) {
+            Prefs.oneHand = it
+        }
+        }
 
+        if (show("kb")) {
         section("キーボード")
         toggle("英数字専用キーボードにする（英字が確実に1文字ずつ送られます。日本語入力は使えません）", Prefs.latinOnly) {
             Prefs.latinOnly = it
@@ -63,11 +85,7 @@ class SettingsActivity : Activity() {
         slider("長押ししてから連続入力が始まるまで（ミリ秒）", 150f, 800f, Prefs.keyRepeatDelay.toFloat(), 0) {
             Prefs.keyRepeatDelay = it.roundToInt()
         }
-
-        toggle("マウスを片手操作にする（キーボード画面のボタンを隠してしまったときも、ここで切り替えられます）", Prefs.oneHand) {
-            Prefs.oneHand = it
-        }
-        box.addView(label(this, "キー・マウスの位置や大きさ、隠す、キーの追加（F5、Ctrl+C など）は、キーボード画面上部の ✎ から変えられます。「PCの入力欄」もそこで表示にできます。", 12f, C.SUB).apply {
+        box.addView(label(this, "キー・マウスの位置や大きさ、隠す、キーの追加（F5、Ctrl+C など）は、≡ →「キーボード画面の配置」から変えられます。「PCの入力欄」もそこで表示にできます。", 12f, C.SUB).apply {
             setPadding(0, dpi(6), 0, 0)
         })
         box.addView(KeyButton(this, "キーボード画面の配置を初期に戻す", 14f).apply {
@@ -82,7 +100,9 @@ class SettingsActivity : Activity() {
                     .setNegativeButton("キャンセル", null).show()
             }
         }, LinearLayout.LayoutParams(-1, dpi(46)).apply { topMargin = dpi(8) })
+        }
 
+        if (show("pad")) {
         section("コントローラー")
         slider("連打の速さ（回/秒）", 5f, 30f, Prefs.turboRate.toFloat(), 0) { Prefs.turboRate = it.roundToInt() }
         toggle("ABXYをSwitchの位置どおりに割り当てる（オフ: 文字どおり A→A）", Prefs.positionalAbxy) {
@@ -111,13 +131,17 @@ class SettingsActivity : Activity() {
                 android.widget.Toast.makeText(this@SettingsActivity, "初期配置に戻しました", android.widget.Toast.LENGTH_SHORT).show()
             }
         }, LinearLayout.LayoutParams(-1, dpi(46)).apply { topMargin = dpi(8) })
+        }
 
+        if (show("screen")) {
         section("PC画面の表示")
         slider("画質（0=低・速い / 1=標準 / 2=高）", 0f, 2f, Prefs.screenQuality.toFloat(), 0) {
             Prefs.screenQuality = it.roundToInt()
         }
         toggle("文字を入力するとき、最後にタップした場所を拡大する", Prefs.screenAutoZoom) { Prefs.screenAutoZoom = it }
+        }
 
+        if (show("receive")) {
         section("PCから受け取る")
         toggle("アプリを閉じてもPCとつないでおく（PCからのお知らせ・ファイル・ページ、スマホを探す を受け取る）", Prefs.keepAlive) {
             Prefs.keepAlive = it
@@ -132,7 +156,9 @@ class SettingsActivity : Activity() {
             "スマホのクリップボードは、PhonePad を開いている間にコピーした文字だけPCへ送られます（Android の決まりのため）。", 12f, C.SUB).apply {
             setPadding(0, dpi(6), 0, 0)
         })
+        }
 
+        if (show("other")) {
         section("PC")
         val auto = toggle("PCの起動時に PhonePad を自動で起動する（PCとつながっているときに変更できます）", false) {
             Link.send("AS ${if (it) 1 else 0}")
@@ -153,7 +179,7 @@ class SettingsActivity : Activity() {
             auto.isChecked = on
             autoUpdating = false
         }
-        Link.send("AQ")
+        if (show("other")) Link.send("AQ")
 
         section("その他")
         toggle("ボタンを押したときに振動する", Prefs.vibrate) { Prefs.vibrate = it }
@@ -198,6 +224,7 @@ class SettingsActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dpi(16), 0, 0)
         }, LinearLayout.LayoutParams(-1, -2))
+        }
 
         setContentView(scroll)
     }
@@ -219,7 +246,19 @@ class SettingsActivity : Activity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (drawer.isOpen) {
+            drawer.close()
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     private fun section(title: String) {
+        // 項目だけを開いたときは、見出しは上に出ているので省く (中の小見出しだけ)
+        if (only.isNotEmpty() && box.childCount == 1) return
         box.addView(label(this, title, 14f, C.ACCENT, true).apply {
             setPadding(0, dpi(24), 0, dpi(6))
         })

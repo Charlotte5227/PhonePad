@@ -43,10 +43,10 @@
   /* ---- 画面 ---- */
   main { flex: 1; min-height: 0; position: relative; overflow: hidden; }
   .view { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 0 calc(var(--sr) + 8px) 0 calc(var(--sl) + 8px); }
-  body.full .top, body.full .tabs { display: none; }
-  .tabs { display: flex; gap: 6px; padding: 6px calc(var(--sr) + 8px) calc(var(--sb) + 6px) calc(var(--sl) + 8px); }
-  .tabs button { flex: 1; min-width: 0; min-height: 48px; font-size: 12px; line-height: 1.2; border-radius: 14px; padding: 0 4px; white-space: nowrap; }
-  .tabs button .i { display: block; font-size: 19px; }
+  body.full .top { display: none; }
+  /* 下の端 (ホームバーの分) を空ける */
+  #kbView { padding-bottom: var(--sb); }
+  #moreView { padding-bottom: calc(var(--sb) + 24px); }
 
   /* キーボード */
   .card { background: var(--surface); border-radius: 16px; padding: 8px; }
@@ -97,7 +97,6 @@
   .kbOverlay { position: absolute; inset: 0; z-index: 5; touch-action: none; }
   .kbHandle { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; }
   .kbHandle::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg); }
-  body.kbEditing .tabs { pointer-events: none; opacity: .35; }
   #kbEditBar button { padding: 0 9px; }
   #kbSel { flex: 1; min-width: 0; font-size: 13px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -175,6 +174,41 @@
   .toast { position: fixed; left: 50%; bottom: calc(var(--sb) + 80px); transform: translateX(-50%); background: var(--surface2);
     border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; max-width: 90%; z-index: 20; }
 
+  /* ≡ のメニュー */
+  .menuBtn { width: 48px; padding: 0; font-size: 24px; line-height: 1; }
+  .top .status { text-align: left; }
+  .drawer { position: fixed; inset: 0; z-index: 22; }
+  .drawer .dim { position: absolute; inset: 0; background: rgba(0,0,0,.55); animation: fadein .15s; }
+  .drawer .panel { position: absolute; top: 0; bottom: 0; left: 0; width: min(84%, 340px); background: var(--surface);
+    display: flex; flex-direction: column; padding: calc(var(--st) + 12px) 10px calc(var(--sb) + 12px) calc(var(--sl) + 12px);
+    animation: slidein .18s ease-out; box-shadow: 4px 0 24px rgba(0,0,0,.4); }
+  .ios .drawer .panel { padding-top: max(calc(var(--st) + 12px), 30px); }
+  @keyframes slidein { from { transform: translateX(-100%); } }
+  @keyframes fadein { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .drawer .panel, .drawer .dim { animation: none; } }
+  .dhead { display: flex; align-items: center; gap: 8px; padding: 0 4px 6px; }
+  .dhead > div { flex: 1; min-width: 0; }
+  .dhead b { display: block; font-size: 18px; }
+  .dhead small { color: var(--sub); font-size: 12px; }
+  .dhead small.ok { color: var(--ok); }
+  .dhead button { width: 44px; padding: 0; }
+  .dnote { color: var(--sub); font-size: 11px; margin: 0 4px 8px; }
+  .dlist { flex: 1; overflow-y: auto; }
+  .ditem { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
+  .ditem .go { flex: 1; min-width: 0; text-align: left; background: none; border: 0; min-height: 46px; font-size: 15px; padding: 0 10px; border-radius: 10px; }
+  .ditem .go.cur { background: var(--surface2); }
+  .ditem .go:active { background: var(--accent); }
+  .ditem .fav { width: 46px; padding: 0; background: none; border: 0; font-size: 20px; color: var(--sub); }
+  .ditem .fav.on { color: var(--accent); }
+  .ditem .mv { width: 44px; padding: 0; min-height: 40px; }
+  .dfoot { padding-top: 8px; }
+  .dfoot button { flex: 1; }
+  .pagehead { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; }
+  .pagehead h1 { flex: 1; font-size: 19px; margin: 0; }
+  .pagehead button { min-height: 38px; font-size: 13px; }
+  .stage button.favkey { font-size: 12px; }
+  .scrbar #scrDrawer { font-size: 20px; width: 44px; padding: 0; }
+
   /* PCから届いたもの (ページ・ファイル) */
   .banner { position: fixed; left: calc(var(--sl) + 10px); right: calc(var(--sr) + 10px); top: calc(var(--st) + 10px); z-index: 25;
     background: var(--surface2); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
@@ -206,9 +240,8 @@
 </div>
 
 <div class="top" id="topBar">
+  <button id="menuBtn" class="menuBtn" aria-label="メニュー">≡</button>
   <div class="status" id="status">接続しています…</div>
-  <button id="kbEdit">✎ 配置</button>
-  <button id="helpBtn" aria-label="使い方">？ 使い方</button>
 </div>
 <div class="top" id="kbEditBar" hidden>
   <div id="kbSel">部品をタップして選ぶ</div>
@@ -282,7 +315,8 @@
     <div class="scrArea" id="scrArea">
       <canvas id="scrCanvas"></canvas>
       <div class="scrbar" id="scrBar">
-        <button id="scrMenu" aria-label="メニュー">☰</button>
+        <button id="scrMenu" aria-label="ボタンを出す">☰</button>
+        <button id="scrDrawer" aria-label="メニュー">≡</button>
         <button id="scrCtrl"></button>
         <button id="scrQual"></button>
         <button id="scrDrag"></button>
@@ -302,57 +336,83 @@
   </section>
 
   <!-- その他 -->
+  <!-- メニューから開くページ (音量・クリップボード・設定など)。開いたものだけを出す -->
   <section class="view scroll" id="moreView" hidden>
-    <h2>音量</h2>
-    <div class="set"><label><span>PCの音量</span><span id="volVal">-</span></label>
-      <input type="range" id="vol" min="0" max="100" value="0"></div>
-    <div class="row"><button id="mute">ミュート</button><button id="listen">🎧 スマホで聞く: OFF</button></div>
-    <label class="chk"><input type="checkbox" id="mutePc"><span>スマホで聞いている間は、PCのスピーカーから音を出さない（オフ: 両方から鳴らす）</span></label>
-    <p class="note" id="listenNote">「スマホで聞く」はこのページを開いている間だけ鳴ります。iPhone がマナーモードだと鳴らないことがあります。</p>
-    <div class="list" id="devs" style="margin-top:8px"></div>
-    <p class="note" id="volErr"></p>
+    <div class="pagehead"><h1 id="pageTitle"></h1><button id="pageBack">⌨ キーボードへ</button></div>
 
-    <h2>クリップボード</h2>
-    <textarea id="clipText" placeholder="ここに書いた文字をPCへ送れます。PCから受け取った文字もここに出ます。"></textarea>
-    <div class="row" style="margin-top:6px"><button id="clipSend">PCへ送る</button><button id="clipGet">PCから受け取る</button></div>
-    <p class="note">受け取った文字は、上の欄を長押しして「コピー」してください（ブラウザ版では自動でコピーできません）。</p>
-
-    <h2>ファイル</h2>
-    <div class="row"><button id="sendFileBtn">ファイルをPCへ送る</button></div>
-    <input type="file" id="sendFileIn" multiple hidden>
-    <p class="note" id="sendProg">写真などを選ぶと、PCの「ダウンロード」の中の「PhonePad」フォルダに保存されます。PCから送られたファイルは、届くと画面の上に「保存」が出ます。</p>
-
-    <h2>電源</h2>
-    <div class="row">
-      <button data-pw="LOCK">ロック</button><button data-pw="MONOFF">画面を消す</button><button data-pw="SLEEP">スリープ</button>
-      <button data-pw="RESTART">再起動</button><button data-pw="SHUTDOWN">シャットダウン</button>
+    <div data-sec="volume">
+      <div class="set"><label><span>PCの音量</span><span id="volVal">-</span></label>
+        <input type="range" id="vol" min="0" max="100" value="0"></div>
+      <div class="row"><button id="mute">ミュート</button><button id="listen">🎧 スマホで聞く: OFF</button></div>
+      <label class="chk"><input type="checkbox" id="mutePc"><span>スマホで聞いている間は、PCのスピーカーから音を出さない（オフ: 両方から鳴らす）</span></label>
+      <p class="note" id="listenNote">「スマホで聞く」はこのページを開いている間だけ鳴ります。iPhone がマナーモードだと鳴らないことがあります。</p>
+      <h2>出力先</h2>
+      <div class="list" id="devs"></div>
+      <p class="note" id="volErr"></p>
     </div>
 
-    <h2>PCの接続画面</h2>
-    <div class="row"><button id="showPcPage">PCに接続画面（QRコードなど）を表示する</button></div>
-    <p class="note">PC側で PhonePad の画面（QRコード・接続中のスマホ・設定）をブラウザに開きます。</p>
+    <div data-sec="clipboard">
+      <textarea id="clipText" placeholder="ここに書いた文字をPCへ送れます。PCから受け取った文字もここに出ます。"></textarea>
+      <div class="row" style="margin-top:6px"><button id="clipSend">PCへ送る</button><button id="clipGet">PCから受け取る</button></div>
+      <p class="note">受け取った文字は、上の欄を長押しして「コピー」してください（ブラウザ版では自動でコピーできません）。</p>
+    </div>
 
-    <h2>PCの状態</h2>
-    <dl class="stat" id="sys"><dt>CPU</dt><dd>-</dd></dl>
+    <div data-sec="files">
+      <div class="row"><button id="sendFileBtn">ファイルを選んでPCへ送る</button></div>
+      <input type="file" id="sendFileIn" multiple hidden>
+      <p class="note" id="sendProg">写真などを選ぶと、PCの「ダウンロード」の中の「PhonePad」フォルダに保存されます。PCから送られたファイルは、届くと画面の上に「保存」が出ます。</p>
+    </div>
 
-    <h2>設定（このブラウザに保存）</h2>
-    <div id="settings"></div>
-    <div class="row" style="margin-top:10px"><button id="padReset">コントローラーの配置を初期に戻す</button></div>
-    <div class="row" style="margin-top:6px"><button id="kbResetAll">キーボード画面の配置を初期に戻す</button></div>
+    <div data-sec="power">
+      <p class="note" style="margin-top:0">スリープ・再起動・シャットダウンは、押すと確認が出ます。</p>
+      <div class="row">
+        <button data-pw="LOCK">ロック</button><button data-pw="MONOFF">画面を消す</button><button data-pw="SLEEP">スリープ</button>
+        <button data-pw="RESTART">再起動</button><button data-pw="SHUTDOWN">シャットダウン</button>
+      </div>
+    </div>
 
-    <h2>このページについて</h2>
-    <p class="note" id="aboutVer"></p>
-    <div class="row" style="margin-top:6px"><button id="howKb">キーボード・マウスの使い方</button><button id="howPad">コントローラーの使い方</button><button id="howScr">PCの画面の使い方</button></div>
-    <div class="row" style="margin-top:6px"><button id="helpBtn2">ブラウザ版でできること・できないこと</button><button id="guideLink">くわしい説明（配布サイト）</button></div>
+    <div data-sec="pcinfo">
+      <dl class="stat" id="sys"><dt>CPU</dt><dd>-</dd></dl>
+    </div>
+
+    <div data-sec="set_mouse"><div id="setMouse"></div></div>
+    <div data-sec="set_kb"><div id="setKb"></div>
+      <p class="note">キー・マウスの位置や大きさ、隠す、キーの追加は ≡ →「キーボード画面の配置」から変えられます。</p>
+      <div class="row" style="margin-top:10px"><button id="kbResetAll">キーボード画面の配置を初期に戻す</button></div>
+    </div>
+    <div data-sec="set_pad"><div id="setPad"></div>
+      <p class="note">ボタンの位置・大きさ・形は、コントローラー画面の ✎ から変えられます。</p>
+      <div class="row" style="margin-top:10px"><button id="padReset">コントローラーの配置を初期に戻す</button></div>
+    </div>
+    <div data-sec="set_screen"><div id="setScreen"></div>
+      <p class="note">画質と「操作」の切り替えは、PCの画面の上のボタンでできます。</p>
+    </div>
+    <div data-sec="set_other"><div id="setOther"></div>
+      <h2>PCの接続画面</h2>
+      <div class="row"><button id="showPcPage">PCに接続画面（QRコードなど）を表示する</button></div>
+      <p class="note">PC側で PhonePad の画面（QRコード・接続中のスマホ・設定）を開きます。</p>
+    </div>
+
+    <div data-sec="help">
+      <p class="note" id="aboutVer" style="margin-top:0"></p>
+      <h2>この画面の使い方</h2>
+      <div class="row"><button id="howKb">キーボード・マウス</button><button id="howPad">コントローラー</button><button id="howScr">PCの画面</button></div>
+      <h2>もっと知る</h2>
+      <div class="row"><button id="helpBtn2">ブラウザ版でできること・できないこと</button><button id="guideLink">くわしい説明（配布サイト）</button></div>
+    </div>
   </section>
 </main>
 
-<nav class="tabs" id="tabs">
-  <button data-v="kbView" class="on"><span class="i">⌨</span>キーボード</button>
-  <button data-v="padView"><span class="i">🎮</span>コントローラー</button>
-  <button data-v="scrView"><span class="i">🖥</span>PCの画面</button>
-  <button data-v="moreView"><span class="i">⚙</span>その他</button>
-</nav>
+<!-- ≡ のメニュー (左から出る) -->
+<div class="drawer" id="drawer" hidden>
+  <div class="dim" id="drawerDim"></div>
+  <aside class="panel" aria-label="メニュー">
+    <div class="dhead"><div><b>PhonePad</b><small id="drawerState"></small></div><button id="drawerClose" aria-label="閉じる">✕</button></div>
+    <p class="dnote">☆ を押すと、キーボード画面にボタンとして置けます</p>
+    <div class="dlist" id="drawerList"></div>
+    <div class="row dfoot"><button id="drawerOrder">並べ替え</button></div>
+  </aside>
+</div>
 
 <div class="sheet" id="starSheet" hidden><div>
   <h3>★ ショートカット</h3>
@@ -397,7 +457,7 @@
   <h3 id="coachTitle">この画面の使い方</h3>
   <ul id="coachList"></ul>
   <div class="row" style="margin-top:14px"><button id="coachMore">ブラウザ版でできること・できないこと</button><button id="coachOk" class="on">わかった</button></div>
-  <p class="note">いつでも上の「？ 使い方」から見られます（コントローラーと画面表示では、その他 → 使い方）。</p>
+  <p class="note">いつでも ≡ →「使い方・このページについて」から見られます。</p>
 </div></div>
 
 <div class="sheet" id="helpSheet" hidden><div class="help">

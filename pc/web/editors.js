@@ -204,6 +204,68 @@ const Ed = (() => {
     return bar;
   }
 
+  // ================================================================ 機能 (≡ のメニュー・お気に入り)
+  const FEATURES = [
+    ["kb", "⌨", "キーボード・マウス"], ["pad", "🎮", "コントローラー"], ["screen", "🖥", "PCの画面"],
+    ["shortcuts", "★", "ショートカット"], ["volume", "🔊", "音量・音"], ["clipboard", "📋", "クリップボード"],
+    ["files", "📎", "ファイルをPCへ送る"], ["power", "⏻", "PCの電源"], ["pcinfo", "📊", "PCの状態"],
+    ["kbedit", "✎", "キーボード画面の配置"], ["set_mouse", "🖱", "マウスの設定"], ["set_kb", "⌨", "キーボードの設定"],
+    ["set_pad", "🎮", "コントローラーの設定"], ["set_screen", "🖥", "PCの画面の設定"], ["set_receive", "📥", "PCから受け取る"],
+    ["set_other", "⚙", "その他の設定"], ["help", "？", "使い方"],
+  ].map(([id, icon, label]) => ({ id, icon, label }));
+  // ブラウザ版にない機能
+  const features = (kind) => FEATURES.filter((f) => !(kind === "web" && f.id === "set_receive"))
+    .map((f) => (kind === "web" && f.id === "help" ? { ...f, label: "使い方・このページについて" } : f));
+  // お気に入り (キーボード画面に置く機能のボタン) を、3つずつ並べて置く位置
+  const favRect = (n) => [r3(0.04 + (n % 3) * 0.31), r3(0.33 + (Math.floor(n / 3) % 6) * 0.075), 0.29, 0.06, 0];
+  const favEntry = (f, n) => ({ id: "f_" + f.id, l: f.icon + " " + f.label, k: "", m: 0, r: "", f: f.id, rect: favRect(n) });
+
+  // ≡ のメニューの並びとお気に入り
+  function menu(box, target) {
+    let order, custom;
+    const list = features(target.kind);
+    const reset = () => {
+      const ids = parse(target.items.menuOrder, []) || [];
+      order = ids.map((id) => list.find((f) => f.id === id)).filter(Boolean);
+      for (const f of list) if (!order.includes(f)) order.push(f);
+      custom = parse(target.items.kbCustom, []) || [];
+    };
+    reset();
+    let customChanged = false, orderChanged = false;
+    const bar = saveBar(async () => {
+      const items = {};
+      if (orderChanged) items.menuOrder = JSON.stringify(order.map((f) => f.id));
+      if (customChanged) items.kbCustom = JSON.stringify(custom);
+      await target.save(items);
+      Object.assign(target.items, items);
+      customChanged = orderChanged = false;
+      bar.done("保存しました");
+    }, () => { reset(); customChanged = orderChanged = false; bar.dirty = false; render(); });
+    const ul = el("div", { class: "menulist" });
+    function render() {
+      ul.textContent = "";
+      order.forEach((f, i) => {
+        const fav = custom.some((c) => c.f === f.id);
+        const mv = (d) => { const j = i + d; if (j < 0 || j >= order.length) return; [order[i], order[j]] = [order[j], order[i]]; orderChanged = true; bar.dirty = true; render(); };
+        ul.append(el("div", { class: "menurow" },
+          el("span", { class: "mi", text: f.icon }), el("span", { class: "ml", text: f.label }),
+          f.id === "kb" ? el("span", { class: "favx" }) : el("button", { class: "fav" + (fav ? " on" : ""), title: fav ? "キーボード画面から外す" : "キーボード画面に置く", text: fav ? "★ 置いています" : "☆ 置く", onclick: () => {
+            if (fav) custom = custom.filter((c) => c.f !== f.id);
+            else custom.push(favEntry(f, custom.filter((c) => c.f).length));
+            customChanged = true; bar.dirty = true; render();
+          } }),
+          el("button", { text: "↑", onclick: () => mv(-1) }), el("button", { text: "↓", onclick: () => mv(1) })));
+      });
+    }
+    box.textContent = "";
+    box.append(
+      el("div", { class: "row" }, el("p", { class: "note", style: "margin:0", text: "スマホの ≡ のメニューに並ぶ順番と、キーボード画面に置く機能（お気に入り）です。置いたボタンの場所は「キーボード画面」で変えられます。" }),
+        el("button", { text: "最初の並びに戻す", onclick: () => { order = list.slice(); orderChanged = true; bar.dirty = true; render(); } })),
+      ul, bar.el);
+    render();
+    return bar;
+  }
+
   // ================================================================ キーボード画面の配置
   const R = (x, y, w, h, off) => [x, y, w, h, off ? 1 : 0];
   const KEYS1 = [["esc", "Esc"], ["tab", "Tab"], ["ctrl", "Ctrl"], ["shift", "Shift"], ["alt", "Alt"], ["win", "Win"], ["fn", "Fn"]];
@@ -328,7 +390,7 @@ const Ed = (() => {
         side.append(el("h3", { text: kbLabel(sel, mode, custom) }));
         const r = L[sel];
         if (c) {
-          side.append(el("p", { class: "note", text: describe(c) }),
+          side.append(el("p", { class: "note", text: c.f ? "お気に入り（押すとこの機能が開きます）" : describe(c) }),
             el("div", { class: "actions" }, el("button", { class: "danger", text: "このキーを削除", onclick: () => {
               if (!confirm("「" + c.l + "」を削除しますか？（全部の画面から消えます）")) return;
               custom = custom.filter((x) => x !== c);
@@ -342,6 +404,19 @@ const Ed = (() => {
         }
         side.append(el("p", { class: "note", text: `位置 ${Math.round(r[0] * 100)}%, ${Math.round(r[1] * 100)}%　大きさ ${Math.round(r[2] * 100)}% × ${Math.round(r[3] * 100)}%` }));
       }
+      // 機能のボタン (お気に入り) を置く
+      const fsel = el("select", {}, ...features(target.kind).filter((f) => f.id !== "kb" && !custom.some((c) => c.f === f.id))
+        .map((f) => el("option", { value: f.id, text: f.icon + " " + f.label })));
+      side.append(el("h3", { text: "機能のボタンを置く", style: "margin-top:18px" }),
+        el("p", { class: "note", style: "margin:0 0 6px", text: "押すとその機能が開くボタンです（スマホの ≡ のメニューの ☆ と同じ）。" }),
+        el("div", { class: "actions", style: "margin-top:0" }, fsel, el("button", { text: "置く", onclick: () => {
+          const f = features(target.kind).find((x) => x.id === fsel.value);
+          if (!f) return;
+          const c = favEntry(f, custom.filter((x) => x.f).length);
+          custom.push(c);
+          for (const L2 of Object.values(layouts)) L2[c.id] = c.rect.slice();
+          customChanged = true; sel = c.id; bar.dirty = true; render();
+        } })));
       // キーを追加
       side.append(el("h3", { text: "キーを追加", style: "margin-top:18px" }));
       const name = el("input", { type: "text", placeholder: "ボタンの名前（例: 更新）" });
@@ -419,7 +494,7 @@ const Ed = (() => {
     L3: [0.44, 0.60], R3: [0.56, 0.60], GEAR: [0.46, 0.06], EDIT: [0.54, 0.06], SWITCH: [0.50, 0.885],
   };
   const PAD_NAMES = { ZL: "ZL", L: "L", ZR: "ZR", R: "R", LS: "Lスティック", RS: "Rスティック", DP: "十字キー", FACE: "ABXY",
-    MINUS: "−", PLUS: "+", T: "T（連打）", H: "H（ホーム）", L3: "L3", R3: "R3", GEAR: "⚙ 設定", EDIT: "✎ 配置", SWITCH: "⌨ 切替" };
+    MINUS: "−", PLUS: "+", T: "T（連打）", H: "H（ホーム）", L3: "L3", R3: "R3", GEAR: "≡ メニュー", EDIT: "✎ 配置", SWITCH: "⌨ 切替" };
   const SHAPES = ["標準", "丸", "角丸", "四角"];
   const AREA_KEYS = ["A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "−", "H", "L3", "R3", "↑", "↓", "←", "→"];
   const PW = 760, PH = 352; // 横向きのスマホの画面 (このくらいの大きさで描く)
@@ -478,7 +553,7 @@ const Ed = (() => {
         case "H": C(PH * 0.062 * s, "H"); break;
         case "L3": C(PH * 0.055 * s, "L3"); break;
         case "R3": C(PH * 0.055 * s, "R3"); break;
-        case "GEAR": C(PH * 0.045 * s, "⚙"); break;
+        case "GEAR": C(PH * 0.045 * s, "≡"); break;
         case "EDIT": C(PH * 0.045 * s, "✎"); break;
       }
       return g;
@@ -518,7 +593,7 @@ const Ed = (() => {
             el("button", { text: "大きく", onclick: () => { s[2] = Math.round(clamp(s[2] + 0.1, 0.4, 2.5) * 10) / 10; bar.dirty = true; render(); } }),
             el("button", { text: "形: " + SHAPES[s[3] | 0], onclick: () => { s[3] = ((s[3] | 0) + 1) % 4; bar.dirty = true; render(); } }),
             el("button", { text: s[4] ? "表示する" : "隠す", onclick: () => {
-              if (!s[4] && (sel === "EDIT" || sel === "SWITCH")) { alert("✎ と ⌨ は隠せません（スマホで配置を変えたり、キーボードに戻ったりできなくなるため）"); return; }
+              if (!s[4] && (sel === "EDIT" || sel === "SWITCH" || sel === "GEAR")) { alert("≡・✎・⌨ は隠せません（スマホでメニューを開いたり、配置を変えたり、キーボードに戻ったりできなくなるため）"); return; }
               s[4] = s[4] ? 0 : 1; bar.dirty = true; render();
             } })),
           el("p", { class: "note", text: `大きさ ${Math.round(s[2] * 100)}%（マウスのホイールでも変えられます）` }));
@@ -585,5 +660,5 @@ const Ed = (() => {
     return bar;
   }
 
-  return { shortcuts, keyboard, controller, el, parse, pickApp, describe };
+  return { shortcuts, keyboard, controller, menu, features, el, parse, pickApp, describe };
 })();

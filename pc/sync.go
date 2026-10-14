@@ -32,7 +32,7 @@ var kbLayoutKey = regexp.MustCompile(`^kbLayout\.[A-Za-z]{2,8}(\.land)?$`)
 // 同期する設定のキー
 func isSyncKey(k string) bool {
 	switch k {
-	case "shortcuts", "kbCustom", "padLayout", "padAreas", "padPresets":
+	case "shortcuts", "kbCustom", "padLayout", "padAreas", "padPresets", "menuOrder":
 		return true
 	}
 	return kbLayoutKey.MatchString(k)

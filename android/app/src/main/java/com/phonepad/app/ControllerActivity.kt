@@ -32,7 +32,8 @@ class ControllerActivity : Activity() {
         view = ControllerView(
             this,
             onSwitch = { finish() },
-            onSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
+            // ⚙ はメニュー (ほかの機能・設定はここから)
+            onSettings = { drawer.open() },
         )
         view.setOnApplyWindowInsetsListener { v, ins ->
             // カメラの切り欠き部分にはボタンを置かない
@@ -49,6 +50,8 @@ class ControllerActivity : Activity() {
     companion object {
         const val EXTRA_EDIT = "edit"
     }
+
+    private val drawer by lazy { MenuDrawer(this) }
 
     private fun hideBars() {
         window.insetsController?.let {
@@ -109,6 +112,10 @@ class ControllerActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (drawer.isOpen) {
+            drawer.close()
+            return
+        }
         // 配置の編集中は、戻る操作で編集を終える
         if (view.editing) {
             view.finishEditing()
@@ -342,7 +349,7 @@ class ControllerView(
     private val bL3 = Btn("L3", LTHUMB)
     private val bR3 = Btn("R3", RTHUMB)
     private val bSwitch = Btn("⌨", 0, Kind.SWITCH)
-    private val bGear = Btn("⚙", 0, Kind.GEAR)
+    private val bGear = Btn("≡", 0, Kind.GEAR)
     private val bEdit = Btn("✎", 0, Kind.EDIT)
     private val faces = listOf(bA, bB, bX, bY)
     private val circles = listOf(bA, bB, bX, bY, bMinus, bPlus, bHome, bTurbo, bL3, bR3, bGear, bEdit)
@@ -1312,7 +1319,7 @@ class ControllerView(
             drawLabel(c, "T", bTurbo.cx, bTurbo.cy, bTurbo.r * 0.9f, if (globalTurbo) C.ACCENT_INK else C.ACCENT)
         }
 
-        part(c, "GEAR") { drawCircleBtn(c, bGear, pressed(bGear), "⚙", 1.0f) }
+        part(c, "GEAR") { drawCircleBtn(c, bGear, pressed(bGear), "≡", 1.0f) }
         drawCircleBtn(c, bEdit, pressed(bEdit), "✎", 1.0f)
         drawRectBtn(c, bSwitch, pressed(bSwitch), h * 0.09f)
 

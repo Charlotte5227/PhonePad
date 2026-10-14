@@ -183,6 +183,11 @@ object Prefs {
         get() = synced("padPresets", "{}")
         set(v) = ConfigSync.write("padPresets", v)
 
+    /** ≡ のメニューの並び (JSON 配列。PC とやりとりする) */
+    var menuOrder: String
+        get() = synced("menuOrder", "")
+        set(v) = ConfigSync.write("menuOrder", v)
+
     // ---- PC から受け取る ----
     /** アプリを閉じても PC とつないでおく (お知らせ・ファイル・スマホを探すを受け取る) */
     var keepAlive: Boolean

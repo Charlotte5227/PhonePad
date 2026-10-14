@@ -65,6 +65,10 @@ class ScreenActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpi(8), dpi(8), dpi(8), dpi(8))
         }
+        bar.addView(KeyButton(this, "≡", 20f).apply {
+            alpha = 0.85f
+            onTap = { drawer.open() }
+        }, LinearLayout.LayoutParams(dpi(44), dpi(38)).apply { rightMargin = dpi(6) })
         bar.addView(KeyButton(this, "← 戻る", 13f).apply {
             alpha = 0.85f
             setPadding(dpi(12), 0, dpi(12), 0)
@@ -251,6 +255,18 @@ class ScreenActivity : Activity() {
 
     private var land = false
     private var menuOpen = false
+    private val drawer by lazy { MenuDrawer(this) }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (drawer.isOpen) {
+            drawer.close()
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
+
     private lateinit var menuBtn: KeyButton
 
     private fun applyLand() {

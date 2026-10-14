@@ -18,7 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** キーボードに自分で追加したキー (rect は最初に置く位置) */
-class CustomKey(val id: String, val sc: Shortcut, val rect: FloatArray)
+class CustomKey(val id: String, val sc: Shortcut, val rect: FloatArray, val feature: String = "")
 
 /**
  * キーボード + マウス(トラックパッド/スティック/片手) 画面。
@@ -137,8 +137,12 @@ class RemoteActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpi(8), dpi(6), dpi(8), dpi(2))
         }
-        top.addView(KeyButton(this, "🎮", 17f).apply {
-            onTap = { openController() }
+        // ≡ のメニュー (ほかの機能はここから。よく使うものは ☆ でキーボード画面に置ける)
+        top.addView(KeyButton(this, "≡", 22f).apply {
+            onTap = {
+                hideIme()
+                drawer.open()
+            }
         }, LinearLayout.LayoutParams(dpi(48), dpi(40)))
         statusView = label(this, "", 13f, C.SUB, true).apply {
             gravity = Gravity.CENTER
@@ -155,28 +159,8 @@ class RemoteActivity : Activity() {
             }
         }
         top.addView(statusView, LinearLayout.LayoutParams(0, dpi(40), 1f))
-        top.addView(KeyButton(this, "★", 17f).apply {
-            onTap = {
-                hideIme()
-                ShortcutPanel(this@RemoteActivity).show()
-            }
-        }, LinearLayout.LayoutParams(dpi(40), dpi(40)).apply { rightMargin = dpi(4) })
-        top.addView(KeyButton(this, "🔊", 16f).apply {
-            onTap = { VolumePanel(this@RemoteActivity).show() }
-        }, LinearLayout.LayoutParams(dpi(40), dpi(40)).apply { rightMargin = dpi(4) })
-        top.addView(KeyButton(this, "🖥", 16f).apply {
-            onTap = {
-                hideIme()
-                startActivity(Intent(this@RemoteActivity, ScreenActivity::class.java))
-            }
-        }, LinearLayout.LayoutParams(dpi(40), dpi(40)).apply { rightMargin = dpi(4) })
-        // ボタンの配置を変える
-        top.addView(KeyButton(this, "✎", 17f).apply {
-            onTap = { setEditing(true) }
-        }, LinearLayout.LayoutParams(dpi(40), dpi(40)).apply { rightMargin = dpi(4) })
-        top.addView(KeyButton(this, "⚙", 18f).apply {
-            onTap = { startActivity(Intent(this@RemoteActivity, SettingsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dpi(40), dpi(40)))
+        // 左右の釣り合いをとる (状態の表示を真ん中に)
+        top.addView(View(this), LinearLayout.LayoutParams(dpi(48), dpi(40)))
         root.addView(top)
         root.addView(buildEditBar())
 
@@ -323,7 +307,7 @@ class RemoteActivity : Activity() {
                 val o = a.getJSONObject(i)
                 val r = o.optJSONArray("rect")
                 val rect = FloatArray(5) { j -> if (r != null && j < r.length()) r.optDouble(j, 0.0).toFloat() else floatArrayOf(.35f, .45f, .3f, .07f, 0f)[j] }
-                out.add(CustomKey(o.getString("id"), Shortcut(o.optString("l"), o.optString("k"), o.optInt("m"), o.optString("r")), rect))
+                out.add(CustomKey(o.getString("id"), Shortcut(o.optString("l"), o.optString("k"), o.optInt("m"), o.optString("r")), rect, o.optString("f")))
             }
         } catch (_: Exception) {
         }
@@ -335,15 +319,35 @@ class RemoteActivity : Activity() {
         for (c in customs) {
             val r = JSONArray()
             c.rect.forEach { r.put(it.toDouble()) }
-            a.put(JSONObject().put("id", c.id).put("l", c.sc.label).put("k", c.sc.key).put("m", c.sc.mods).put("r", c.sc.run).put("rect", r))
+            a.put(JSONObject().put("id", c.id).put("l", c.sc.label).put("k", c.sc.key).put("m", c.sc.mods).put("r", c.sc.run).put("rect", r).apply { if (c.feature.isNotEmpty()) put("f", c.feature) })
         }
         Prefs.kbCustom = a.toString()
     }
 
     private fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
 
+    /** ≡ のメニュー (お気に入りを変えたらキーボード画面を作り直す) */
+    private val drawer by lazy {
+        MenuDrawer(this) {
+            customs = loadCustoms()
+            buildStage()
+        }
+    }
+
+    /** 配置を変える (メニューの「キーボード画面の配置」から) */
+    fun startEditing() = setEditing(true)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_EDIT, false)) stage.post { setEditing(true) }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (drawer.isOpen) {
+            drawer.close()
+            return
+        }
         if (::stage.isInitialized && stage.editing) {
             setEditing(false)
             return
@@ -639,8 +643,14 @@ class RemoteActivity : Activity() {
 
         // 自分で追加したキー
         for (c in customs) {
-            stage.add(FreeStage.Part(c.id, key(c.sc.label, 13f) { sendCustom(c.sc) }.apply { maxLines = 2 },
-                "追加したキー「${c.sc.label}」", customId = c.id))
+            if (c.feature.isNotEmpty()) {
+                // お気に入り: その機能を開くボタン
+                stage.add(FreeStage.Part(c.id, key(c.sc.label, 13f) { hideIme(); Features.launch(this, c.feature) }.apply { maxLines = 2 },
+                    "お気に入り「${c.sc.label}」", customId = c.id))
+            } else {
+                stage.add(FreeStage.Part(c.id, key(c.sc.label, 13f) { sendCustom(c.sc) }.apply { maxLines = 2 },
+                    "追加したキー「${c.sc.label}」", customId = c.id))
+            }
         }
 
         stage.rects = FreeStage.merge(defaults(m), Prefs.kbLayout(m))
@@ -739,10 +749,6 @@ class RemoteActivity : Activity() {
         fieldWasShown = show
     }
 
-    private fun openController() {
-        hideIme()
-        startActivity(Intent(this, ControllerActivity::class.java))
-    }
 
     private fun openConnect() {
         Link.disconnect()

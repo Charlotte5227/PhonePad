@@ -6,7 +6,7 @@ const Manage = (() => {
   const $ = (id) => document.getElementById(id);
   const KIND = { android: "アプリ", web: "ブラウザ版" };
   let phones = [];
-  let curPhone = null, curTab = "sc", curBar = null;
+  let curPhone = null, curTab = "menu", curBar = null;
 
   async function getJSON(u) { const r = await fetch(u, { cache: "no-store" }); if (!r.ok) throw new Error(await r.text()); return r.json(); }
   async function postJSON(u, v) {
@@ -61,7 +61,7 @@ const Manage = (() => {
       : "いまはつながっていません。保存した内容は、次にこのスマホがつながったときに届きます。" + (pend ? "（まだ届けていない変更があります）" : "");
     const tabs = el("div", { class: "tabs2" });
     const body = el("div", { class: "edbody" });
-    const TABS = [["sc", "★ ショートカット"], ["kb", "キーボード画面"], ["pad", "コントローラー"], ["more", "その他"]];
+    const TABS = [["menu", "≡ メニュー・お気に入り"], ["sc", "★ ショートカット"], ["kb", "キーボード画面"], ["pad", "コントローラー"], ["more", "その他"]];
     for (const [k, n] of TABS) {
       tabs.append(el("button", { text: n, class: k === curTab ? "on" : "", onclick: () => { if (k === curTab || !leaveOK()) return; curTab = k; renderPhone(); } }));
     }
@@ -73,7 +73,8 @@ const Manage = (() => {
         Object.assign(p.items, items);
       },
     };
-    if (curTab === "sc") curBar = Ed.shortcuts(body, target);
+    if (curTab === "menu") curBar = Ed.menu(body, target);
+    else if (curTab === "sc") curBar = Ed.shortcuts(body, target);
     else if (curTab === "kb") curBar = Ed.keyboard(body, target);
     else if (curTab === "pad") curBar = Ed.controller(body, target);
     else {

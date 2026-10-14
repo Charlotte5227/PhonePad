@@ -80,7 +80,7 @@ const Pad = (function () {
   const bL = btn("L", LB, "shoulder"), bR = btn("R", RB, "shoulder"), bZL = btn("ZL", LT, "shoulder"), bZR = btn("ZR", RT, "shoulder");
   const bMinus = btn("−", BACK), bPlus = btn("+", START), bHome = btn("H", GUIDE), bTurbo = btn("T", 0, "turbo");
   const bL3 = btn("L3", LTHUMB), bR3 = btn("R3", RTHUMB);
-  const bSwitch = btn("⌨", 0, "switch"), bGear = btn("⚙", 0, "gear"), bEdit = btn("✎", 0, "edit");
+  const bSwitch = btn("⌨", 0, "switch"), bGear = btn("≡", 0, "gear"), bEdit = btn("✎", 0, "edit");
   const faces = [bA, bB, bX, bY];
   const circles = [bA, bB, bX, bY, bMinus, bPlus, bHome, bTurbo, bL3, bR3, bGear, bEdit];
   const rects = [bL, bR, bZL, bZR, bSwitch];
@@ -331,7 +331,7 @@ const Pad = (function () {
     if (o.type === "b") {
       const k = o.btn.kind;
       if (k === "switch") { blockClicks(); Views.show("kbView"); return; }
-      if (k === "gear") { blockClicks(); Views.show("moreView"); return; }
+      if (k === "gear") { blockClicks(); Menu.open(); return; }
       if (k === "edit") { blockClicks(); setEditing(true); return; }
       if (k === "turbo") { turboPressed(); sendState(); draw(); return; }
       owners.set(e.pointerId, o);

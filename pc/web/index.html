@@ -103,6 +103,7 @@
   .filters button { font-size: 13px; padding: 3px 12px; border-radius: 99px; }
   .filters button.on { background: var(--accent); color: var(--card); border-color: var(--accent); }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .row > button { white-space: nowrap; }
   .page.wide { max-width: 1000px; }
   input[type=text], input[type=search], select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
     border-radius: 8px; padding: 6px 10px; max-width: 100%; }
@@ -176,6 +177,16 @@
   .padsvg .area.sel { fill: rgba(224,163,90,.35); }
   .padsvg .areatext { fill: #e0a35a; font-size: 18px; }
   .padsvg .drawing { fill: rgba(224,163,90,.2); stroke: #e0a35a; stroke-width: 2; }
+
+  /* メニューの並び */
+  .menulist { margin-top: 12px; }
+  .menurow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .menurow .mi { width: 28px; text-align: center; font-size: 18px; }
+  .menurow .ml { flex: 1; }
+  .menurow button { padding: 3px 10px; font-size: 13px; }
+  .menurow .fav { min-width: 9em; color: var(--sub); }
+  .menurow .fav.on { color: var(--accent); border-color: var(--accent); }
+  .menurow .favx { min-width: 9em; }
 
   /* アプリごとの配置 */
   .fglive { background: var(--accent-soft); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
@@ -350,7 +361,7 @@
       <h2>スマホから受け取ったファイル</h2>
       <p class="note" style="margin-top:0">保存先: <span id="recvDir">-</span></p>
       <div class="actions"><button id="openRecv">フォルダを開く</button></div>
-      <p class="note">スマホでは、Android アプリの ★ →「ファイルをPCへ送る」か、写真などの「共有」→「PhonePad」で送れます（ブラウザ版は その他 →「ファイルをPCへ送る」）。</p>
+      <p class="note">スマホでは ≡ →「ファイルをPCへ送る」で送れます。Android アプリは、写真などの「共有」→「PhonePad（PCへ送る）」からも送れます。</p>
     </section>
   </div>
 

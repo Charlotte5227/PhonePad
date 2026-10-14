@@ -40,7 +40,7 @@ function b64urlBytes(s) {
 function rawStore(k, s) { try { if (s === "" || s == null) localStorage.removeItem("pp." + k); else localStorage.setItem("pp." + k, s); } catch (e) {} }
 function rawLoad(k) { try { return localStorage.getItem("pp." + k) || ""; } catch (e) { return ""; } }
 // 配置・ショートカットは PC とやりとりする (Sync)。アプリごとの配置を使っている間は、そちらを読み書きする
-const SYNC_RE = /^(shortcuts|kbCustom|padLayout|padAreas|kbLayout\.[A-Za-z]{2,8}(\.land)?)$/;
+const SYNC_RE = /^(shortcuts|kbCustom|padLayout|padAreas|menuOrder|kbLayout\.[A-Za-z]{2,8}(\.land)?)$/;
 function store(k, v) {
   const s = JSON.stringify(v);
   if (SYNC_RE.test(k)) { Sync.write(k, s); return; }
@@ -302,7 +302,7 @@ const Sync = {
     }
   },
   items() {
-    const out = { shortcuts: "", kbCustom: "", padLayout: "", padAreas: "" };
+    const out = { shortcuts: "", kbCustom: "", padLayout: "", padAreas: "", menuOrder: "" };
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -383,13 +383,33 @@ const Views = {
     document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== id; });
     // コントローラーと画面表示は、画面いっぱいに使う
     document.body.classList.toggle("full", id === "padView" || id === "scrView");
-    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === id));
     (this.listeners[prev] || []).forEach((f) => f(false));
     (this.listeners[id] || []).forEach((f) => f(true));
   },
   on(id, fn) { (this.listeners[id] = this.listeners[id] || []).push(fn); },
 };
-document.querySelectorAll("#tabs button").forEach((b) => { b.onclick = () => Views.show(b.dataset.v); });
+// メニューから開くページ (音量・設定など)。moreView の中の1つだけを出す
+const Pages = {
+  sec: "",
+  show(sec) {
+    this.sec = sec;
+    const f = FEATURES.find((x) => x.id === sec);
+    $("pageTitle").textContent = f ? f.icon + " " + f.label : "";
+    document.querySelectorAll("#moreView [data-sec]").forEach((d) => { d.hidden = d.dataset.sec !== sec; });
+    $("moreView").scrollTop = 0;
+    if (Views.current === "moreView") this.opened(sec); else Views.show("moreView");
+  },
+  // 開いたページに合わせて、PCに状態を問い合わせる
+  timer: 0,
+  opened(sec) {
+    clearInterval(this.timer);
+    if (sec === "volume") Link.send("VQ");
+    if (sec === "pcinfo") { Link.send("SQ"); this.timer = setInterval(() => Link.send("SQ"), 3000); }
+    document.querySelectorAll("#moreView input[data-k]").forEach((c) => { c.checked = !!prefs[c.dataset.k]; });
+  },
+};
+Views.on("moreView", (on) => { if (on) Pages.opened(Pages.sec); else clearInterval(Pages.timer); });
+$("pageBack").onclick = () => Views.show("kbView");
 
 // ---------------------------------------------------------------- キーボードが出たとき
 // iPhone では、キーボードが出ても画面の大きさが変わらず下が隠れるので、見えている範囲に合わせる
@@ -1001,18 +1021,10 @@ Link.on("SI ", (b) => {
   dl.textContent = "";
   rows.forEach(([k, v]) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; dl.append(dt, dd); });
 });
-let sysTimer = 0;
-Views.on("moreView", (on) => {
-  clearInterval(sysTimer);
-  if (on) {
-    Link.send("VQ"); Link.send("SQ");
-    sysTimer = setInterval(() => Link.send("SQ"), 3000);
-  }
-});
 
 // 設定
 (function settings() {
-  const box = $("settings");
+  let box = $("setMouse");
   const slider = (key, title, lo, hi, step) => {
     const d = document.createElement("div");
     d.className = "set";
@@ -1036,18 +1048,25 @@ Views.on("moreView", (on) => {
     l.append(c, s);
     box.appendChild(l);
   };
+  // マウス
   slider("mouseSpeed", "マウスの速さ", 0.3, 4, 0.1);
   slider("mouseAccel", "マウスの加速", 0, 1.5, 0.1);
   slider("scrollSpeed", "スクロールの速さ", 0.3, 3, 0.1);
-  slider("keyRepeatRate", "矢印キーなどを長押ししたときの速さ（回/秒）", 4, 40, 1);
-  slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
   check("invertTwoFinger", "2本指スクロールの向きを逆にする");
   check("oneHand", "マウスを片手操作にする（キーボード画面のボタンを隠してしまったときも、ここで切り替えられます）", () => window.applyOneHand && applyOneHand());
   check("oneHandLeft", "片手操作を左手用にする", () => window.applyOneHand && applyOneHand());
-  // 画面のボタンで切り替えたときにも合わせる
-  Views.on("moreView", (on) => { if (on) box.querySelectorAll("input[data-k]").forEach((c) => { c.checked = !!prefs[c.dataset.k]; }); });
-  if (IS_IOS_SAFARI) slider("bottomGap", "画面の下の余白（下のボタンが Safari のバーに隠れるときは大きく）", 0, 120, 2);
+  // キーボード
+  box = $("setKb");
+  slider("keyRepeatRate", "矢印キーなどを長押ししたときの速さ（回/秒）", 4, 40, 1);
+  slider("keyRepeatDelay", "長押ししてから連続入力が始まるまで（ミリ秒）", 150, 800, 50);
+  // PCの画面
+  box = $("setScreen");
   check("scrAutoZoom", "PCの画面で文字を入力するとき、最後にタップした場所を拡大する");
+  // その他
+  box = $("setOther");
+  if (IS_IOS_SAFARI) slider("bottomGap", "画面の下の余白（下のボタンが Safari のバーに隠れるときは大きく）", 0, 120, 2);
+  // コントローラー
+  box = $("setPad");
   slider("turboRate", "連打の速さ（回/秒）", 5, 30, 1);
   check("positional", "ABXYをSwitchの位置どおりに割り当てる（オフ: 文字どおり A→A）", () => window.Pad && Pad.prefsChanged());
   check("floatingSticks", "コントローラーのスティックを触れた位置に出す", () => window.Pad && Pad.prefsChanged());
@@ -1263,6 +1282,120 @@ $("sendFileIn").onchange = async () => {
   $("sendProg").textContent = ok + " 個のファイルをPCへ送りました（PCの「ダウンロード」の中の「PhonePad」フォルダ）";
 };
 
+// ---------------------------------------------------------------- ≡ のメニュー
+// 機能を押すとそこへ移り、☆ を押すとキーボード画面にその機能のボタンを置く (お気に入り)。並びは変えられる。
+// ID はアプリ・PC の画面と同じ
+const FEATURES = [
+  ["kb", "⌨", "キーボード・マウス"], ["pad", "🎮", "コントローラー"], ["screen", "🖥", "PCの画面"],
+  ["shortcuts", "★", "ショートカット"], ["volume", "🔊", "音量・音"], ["clipboard", "📋", "クリップボード"],
+  ["files", "📎", "ファイルをPCへ送る"], ["power", "⏻", "PCの電源"], ["pcinfo", "📊", "PCの状態"],
+  ["kbedit", "✎", "キーボード画面の配置"], ["set_mouse", "🖱", "マウスの設定"], ["set_kb", "⌨", "キーボードの設定"],
+  ["set_pad", "🎮", "コントローラーの設定"], ["set_screen", "🖥", "PCの画面の設定"], ["set_other", "⚙", "その他の設定"],
+  ["help", "？", "使い方・このページについて"],
+].map(([id, icon, label]) => ({ id, icon, label }));
+
+const Menu = {
+  reorder: false,
+  ordered() {
+    const ids = load("menuOrder", []) || [];
+    const out = ids.map((id) => FEATURES.find((f) => f.id === id)).filter(Boolean);
+    for (const f of FEATURES) if (!out.includes(f)) out.push(f);
+    return out;
+  },
+  isFav(id) { return (load("kbCustom", []) || []).some((c) => c.f === id); },
+  toggleFav(id) {
+    const f = FEATURES.find((x) => x.id === id);
+    let list = load("kbCustom", []) || [];
+    const had = list.some((c) => c.f === id);
+    if (had) list = list.filter((c) => c.f !== id);
+    else {
+      // マウスの面の上の方に、3つずつ並べて置く (配置で好きな場所へ動かせる)
+      const n = list.filter((c) => c.f).length;
+      list.push({ id: "f_" + id, l: f.icon + " " + f.label, k: "", m: 0, r: "", f: id,
+        rect: [+(0.04 + (n % 3) * 0.31).toFixed(3), +(0.33 + (Math.floor(n / 3) % 6) * 0.075).toFixed(3), 0.29, 0.06, 0] });
+    }
+    store("kbCustom", list);
+    if (typeof KbStage !== "undefined") KbStage.reload();
+    toast(had ? "キーボード画面から「" + f.label + "」を外しました" : "キーボード画面に「" + f.label + "」を置きました（≡ →「キーボード画面の配置」で場所を変えられます）");
+  },
+  launch(id) {
+    this.close();
+    blockClicks();
+    switch (id) {
+      case "kb": Views.show("kbView"); break;
+      case "pad": Views.show("padView"); break;
+      case "screen": Views.show("scrView"); break;
+      case "shortcuts": $("starBtn").onclick(); break;
+      case "kbedit": Views.show("kbView"); if (typeof KbStage !== "undefined") KbStage.edit(); break;
+      default: Pages.show(id);
+    }
+  },
+  current() {
+    return { kbView: "kb", padView: "pad", scrView: "screen" }[Views.current] || (Views.current === "moreView" ? Pages.sec : "");
+  },
+  open() {
+    if (typeof KbStage !== "undefined" && KbStage.editing) return;
+    this.reorder = false;
+    this.render();
+    const st = $("drawerState");
+    st.textContent = Link.state === "open" ? "● " + Link.pcName : Link.state === "connecting" ? "接続しています…" : "未接続";
+    st.className = Link.state === "open" ? "ok" : "";
+    $("drawer").hidden = false;
+  },
+  close() { $("drawer").hidden = true; },
+  render() {
+    const box = $("drawerList");
+    box.textContent = "";
+    const list = this.ordered();
+    const cur = this.current();
+    list.forEach((f, i) => {
+      const row = document.createElement("div");
+      row.className = "ditem";
+      const go = document.createElement("button");
+      go.className = "go" + (f.id === cur ? " cur" : "");
+      go.textContent = f.icon + "　" + f.label;
+      if (!this.reorder) go.onclick = () => this.launch(f.id);
+      row.appendChild(go);
+      if (this.reorder) {
+        const mv = (d) => {
+          const j = i + d;
+          if (j < 0 || j >= list.length) return;
+          [list[i], list[j]] = [list[j], list[i]];
+          store("menuOrder", list.map((x) => x.id));
+          this.render();
+        };
+        for (const [t, d] of [["↑", -1], ["↓", 1]]) {
+          const b = document.createElement("button");
+          b.className = "mv"; b.textContent = t; b.onclick = () => mv(d);
+          row.appendChild(b);
+        }
+      } else if (f.id !== "kb") {
+        const fav = this.isFav(f.id);
+        const b = document.createElement("button");
+        b.className = "fav" + (fav ? " on" : "");
+        b.textContent = fav ? "★" : "☆";
+        b.setAttribute("aria-label", (fav ? "キーボード画面から外す: " : "キーボード画面に置く: ") + f.label);
+        b.onclick = () => { this.toggleFav(f.id); this.render(); };
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    });
+    if (this.reorder) {
+      const b = document.createElement("button");
+      b.textContent = "最初の並びに戻す";
+      b.style.cssText = "width:100%;margin-top:8px";
+      b.onclick = () => { unstore("menuOrder"); this.render(); };
+      box.appendChild(b);
+    }
+    $("drawerOrder").textContent = this.reorder ? "並べ替えを終わる" : "並べ替え";
+    $("drawerOrder").classList.toggle("on", this.reorder);
+  },
+};
+$("menuBtn").onclick = () => Menu.open();
+$("drawerClose").onclick = () => Menu.close();
+$("drawerDim").onclick = () => Menu.close();
+$("drawerOrder").onclick = () => { Menu.reorder = !Menu.reorder; Menu.render(); };
+
 // ヘルプ
 const openHelp = () => { $("helpSheet").hidden = false; };
 $("helpBtn2").onclick = openHelp;
@@ -1278,15 +1411,17 @@ const COACH = {
     "2本指でなぞる=スクロール。長押ししてから動かす=ドラッグ。",
     "「長押し」ボタンを押しながらなぞる=スクロール。何もせず離す=中クリック。",
     "Ctrl・Shift・Alt・Win は、1回押すと次の1キーだけ、2回押すと押しっぱなし（もう1回で解除）。",
+    "左上の ≡ でメニューが開きます。コントローラー・PCの画面・ショートカット・音量・設定などは、すべてここから。",
+    "メニューの ☆ を押すと、その機能のボタンをこの画面に置けます（お気に入り）。よく使うものを置いておくと便利です。",
     "★ でコピー・貼り付けなどのショートカットや、アプリ・サイトを開けます。",
     "マウスの右上の「片手操作」で、片手（1本指）だけで使える画面になります。「＜ 左手用」「＞ 右手用」で利き手を切り替えます。",
-    "上の「✎ 配置」で、ボタンの位置・大きさを変えたり、隠したり、好きなキー（F5、Ctrl+C、Alt+Tab など）を追加したりできます。",
+    "≡ →「キーボード画面の配置」で、ボタンの位置・大きさを変えたり、隠したり、好きなキー（F5、Ctrl+C、Alt+Tab など）を追加したりできます。",
   ]],
   padView: ["コントローラー", [
     "スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えます。",
     "L・R のスティックは、触れた位置に出ます（設定で固定にもできます）。",
     "T を押す=「押している間は連打」のON/OFF。ボタンを押しながら T=そのボタンだけ自動連打。",
-    "✎=ボタンの位置・大きさ・形を変える。⌨=キーボードに戻る。⚙=設定。",
+    "≡=メニュー（ほかの機能・設定）。✎=ボタンの位置・大きさ・形を変える。⌨=キーボードに戻る。",
     "✎ →「エリアを描く」で、指でなぞって囲んだ場所を好きなボタンにできます（例: 右半分を全部 A）。使わない部品は「隠す」で消せます。",
   ]],
   scrView: ["PCの画面", [
@@ -1294,7 +1429,7 @@ const COACH = {
     "1本指でなぞる=スクロール（「☐ なぞってカーソル移動」にチェックでカーソル移動）。2本指でなぞる=スクロール。",
     "2本指で広げる・つまむ=拡大・縮小。2本指タップ=右クリック、3本指タップ=中クリック。",
     "「⌨ 文字入力」で下に入力欄とキーが出ます。先にPCの画面で入力したい欄をタップしておくと、その場所が拡大されて見やすくなります。",
-    "「← 戻る」でキーボード画面へ。反応が遅いときは「画質」を下げてください。",
+    "≡ でメニュー、「← 戻る」でキーボード画面へ。反応が遅いときは「画質」を下げてください。",
     "横向きのときは、上のボタンを左上の「☰」にしまっています。押すと出てきます。",
   ]],
 };
@@ -1310,7 +1445,6 @@ function showCoach(id) {
 $("coachOk").onclick = () => { $("coachSheet").hidden = true; };
 $("coachMore").onclick = () => { $("coachSheet").hidden = true; openHelp(); };
 $("coachSheet").addEventListener("click", (e) => { if (e.target === $("coachSheet")) $("coachSheet").hidden = true; });
-$("helpBtn").onclick = () => showCoach(Views.current);
 $("howKb").onclick = () => showCoach("kbView");
 $("howPad").onclick = () => showCoach("padView");
 $("howScr").onclick = () => showCoach("scrView");

@@ -171,6 +171,8 @@
   // 横向きでは、上のボタンを「☰」にしまう
   const bar = document.getElementById("scrBar");
   const menuBtn = document.getElementById("scrMenu");
+  // ≡ のメニュー
+  document.getElementById("scrDrawer").onclick = () => Menu.open();
   menuBtn.onclick = () => bar.classList.toggle("open");
   // 他のボタンを押したら閉じる (☰ 自身と、続けて押すことが多い「画質」は除く)
   bar.addEventListener("click", (e) => {
