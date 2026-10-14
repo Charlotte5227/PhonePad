@@ -159,8 +159,11 @@ class RemoteActivity : Activity() {
             }
         }
         top.addView(statusView, LinearLayout.LayoutParams(0, dpi(40), 1f))
-        // 左右の釣り合いをとる (状態の表示を真ん中に)
-        top.addView(View(this), LinearLayout.LayoutParams(dpi(48), dpi(40)))
+        // ✎ 配置を変える (キー・マウス・お気に入りのボタンの場所や大きさ)
+        top.addView(KeyButton(this, "✎", 20f).apply {
+            contentDescription = "キーボード画面の配置を変える"
+            onTap = { setEditing(true) }
+        }, LinearLayout.LayoutParams(dpi(48), dpi(40)))
         root.addView(top)
         root.addView(buildEditBar())
 
@@ -334,7 +337,7 @@ class RemoteActivity : Activity() {
         }
     }
 
-    /** 配置を変える (メニューの「キーボード画面の配置」から) */
+    /** 配置を変える (右上の ✎ や、メニューの「キーボード画面の配置」から) */
     fun startEditing() = setEditing(true)
 
     override fun onNewIntent(intent: Intent) {

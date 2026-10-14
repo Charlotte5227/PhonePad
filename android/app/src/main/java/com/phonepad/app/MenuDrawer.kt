@@ -147,7 +147,7 @@ class MenuDrawer(private val act: Activity, private val onFavChanged: (() -> Uni
                     background = rounded(0, act.dp(10f))
                     onTap = {
                         val on = Features.toggleFav(f.id)
-                        Toast.makeText(act, if (on) "キーボード画面に「${f.label}」を置きました（✎ で場所を変えられます）" else "キーボード画面から「${f.label}」を外しました", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(act, if (on) "キーボード画面に「${f.label}」を置きました（キーボード画面右上の ✎ で場所を変えられます）" else "キーボード画面から「${f.label}」を外しました", Toast.LENGTH_SHORT).show()
                         onFavChanged?.invoke()
                         render()
                     }

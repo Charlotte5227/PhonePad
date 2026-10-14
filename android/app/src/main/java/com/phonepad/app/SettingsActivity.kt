@@ -85,7 +85,7 @@ class SettingsActivity : Activity() {
         slider("長押ししてから連続入力が始まるまで（ミリ秒）", 150f, 800f, Prefs.keyRepeatDelay.toFloat(), 0) {
             Prefs.keyRepeatDelay = it.roundToInt()
         }
-        box.addView(label(this, "キー・マウスの位置や大きさ、隠す、キーの追加（F5、Ctrl+C など）は、≡ →「キーボード画面の配置」から変えられます。「PCの入力欄」もそこで表示にできます。", 12f, C.SUB).apply {
+        box.addView(label(this, "キー・マウスの位置や大きさ、隠す、キーの追加（F5、Ctrl+C など）は、キーボード画面右上の ✎ から変えられます。「PCの入力欄」もそこで表示にできます。", 12f, C.SUB).apply {
             setPadding(0, dpi(6), 0, 0)
         })
         box.addView(KeyButton(this, "キーボード画面の配置を初期に戻す", 14f).apply {

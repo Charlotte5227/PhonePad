@@ -383,6 +383,8 @@ const Views = {
     document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== id; });
     // コントローラーと画面表示は、画面いっぱいに使う
     document.body.classList.toggle("full", id === "padView" || id === "scrView");
+    // ✎ (配置を変える) はキーボード画面のときだけ
+    $("kbEditBtn").hidden = id !== "kbView";
     (this.listeners[prev] || []).forEach((f) => f(false));
     (this.listeners[id] || []).forEach((f) => f(true));
   },
@@ -1316,7 +1318,7 @@ const Menu = {
     }
     store("kbCustom", list);
     if (typeof KbStage !== "undefined") KbStage.reload();
-    toast(had ? "キーボード画面から「" + f.label + "」を外しました" : "キーボード画面に「" + f.label + "」を置きました（≡ →「キーボード画面の配置」で場所を変えられます）");
+    toast(had ? "キーボード画面から「" + f.label + "」を外しました" : "キーボード画面に「" + f.label + "」を置きました（キーボード画面右上の ✎ で場所を変えられます）");
   },
   launch(id) {
     this.close();
@@ -1392,6 +1394,7 @@ const Menu = {
   },
 };
 $("menuBtn").onclick = () => Menu.open();
+$("kbEditBtn").onclick = () => { if (typeof KbStage !== "undefined") KbStage.edit(); };
 $("drawerClose").onclick = () => Menu.close();
 $("drawerDim").onclick = () => Menu.close();
 $("drawerOrder").onclick = () => { Menu.reorder = !Menu.reorder; Menu.render(); };
@@ -1415,7 +1418,7 @@ const COACH = {
     "メニューの ☆ を押すと、その機能のボタンをこの画面に置けます（お気に入り）。よく使うものを置いておくと便利です。",
     "★ でコピー・貼り付けなどのショートカットや、アプリ・サイトを開けます。",
     "マウスの右上の「片手操作」で、片手（1本指）だけで使える画面になります。「＜ 左手用」「＞ 右手用」で利き手を切り替えます。",
-    "≡ →「キーボード画面の配置」で、ボタンの位置・大きさを変えたり、隠したり、好きなキー（F5、Ctrl+C、Alt+Tab など）を追加したりできます。",
+    "右上の ✎（または ≡ →「キーボード画面の配置」）で、ボタンの位置・大きさを変えたり、隠したり、好きなキー（F5、Ctrl+C、Alt+Tab など）を追加したりできます。",
   ]],
   padView: ["コントローラー", [
     "スマホを横向きにして使います。PCからは Xbox 360 コントローラーに見えます。",

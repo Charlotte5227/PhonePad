@@ -177,6 +177,8 @@
   /* ≡ のメニュー */
   .menuBtn { width: 48px; padding: 0; font-size: 24px; line-height: 1; }
   .top .status { text-align: left; }
+  .top .menuBtn { font-size: 24px; }
+  .top .menuBtn.editBtn { font-size: 20px; }
   .drawer { position: fixed; inset: 0; z-index: 22; }
   .drawer .dim { position: absolute; inset: 0; background: rgba(0,0,0,.55); animation: fadein .15s; }
   .drawer .panel { position: absolute; top: 0; bottom: 0; left: 0; width: min(84%, 340px); background: var(--surface);
@@ -242,6 +244,7 @@
 <div class="top" id="topBar">
   <button id="menuBtn" class="menuBtn" aria-label="メニュー">≡</button>
   <div class="status" id="status">接続しています…</div>
+  <button id="kbEditBtn" class="menuBtn editBtn" aria-label="キーボード画面の配置を変える" title="配置を変える">✎</button>
 </div>
 <div class="top" id="kbEditBar" hidden>
   <div id="kbSel">部品をタップして選ぶ</div>
@@ -377,7 +380,7 @@
 
     <div data-sec="set_mouse"><div id="setMouse"></div></div>
     <div data-sec="set_kb"><div id="setKb"></div>
-      <p class="note">キー・マウスの位置や大きさ、隠す、キーの追加は ≡ →「キーボード画面の配置」から変えられます。</p>
+      <p class="note">キー・マウスの位置や大きさ、隠す、キーの追加は、キーボード画面右上の ✎ から変えられます。</p>
       <div class="row" style="margin-top:10px"><button id="kbResetAll">キーボード画面の配置を初期に戻す</button></div>
     </div>
     <div data-sec="set_pad"><div id="setPad"></div>
