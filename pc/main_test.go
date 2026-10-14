@@ -738,3 +738,168 @@ func TestHistory(t *testing.T) {
 		t.Fatal("not cleared")
 	}
 }
+
+// スマホの設定のやりとり: 受け取る・PCで変えて届ける・つないでいない間の変更・アプリごとの配置
+func TestConfigSync(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
+	ts := httptest.NewServer(s.statusMux())
+	defer ts.Close()
+
+	type phone struct {
+		c     net.Conn
+		lines chan string
+	}
+	connect := func(cfg map[string]any) *phone {
+		a, b := net.Pipe()
+		go s.handleConn(a)
+		br := bufio.NewReader(b)
+		go b.Write([]byte("HELLO " + s.code() + " " + base64.StdEncoding.EncodeToString([]byte("Pixel")) + " 1\n"))
+		if l, _ := br.ReadString('\n'); !strings.HasPrefix(l, "OK") {
+			t.Fatal(l)
+		}
+		p := &phone{c: b, lines: make(chan string, 32)}
+		go func() {
+			for {
+				l, err := br.ReadString('\n')
+				if err != nil {
+					close(p.lines)
+					return
+				}
+				l = strings.TrimSpace(l)
+				if strings.HasPrefix(l, "C") {
+					p.lines <- l
+				}
+			}
+		}()
+		js, _ := json.Marshal(cfg)
+		b.Write([]byte("CFG " + base64.StdEncoding.EncodeToString(js) + "\n"))
+		return p
+	}
+	expect := func(p *phone, prefix string) string {
+		select {
+		case l := <-p.lines:
+			if !strings.HasPrefix(l, prefix) {
+				t.Fatalf("want %s, got %s", prefix, l)
+			}
+			return strings.TrimSpace(strings.TrimPrefix(l, prefix))
+		case <-time.After(2 * time.Second):
+			t.Fatalf("no %s", prefix)
+		}
+		return ""
+	}
+	decode := func(b64 string, v any) {
+		if err := unb64json(b64, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	postJSON := func(path string, v any) *http.Response {
+		js, _ := json.Marshal(v)
+		r, err := http.Post(ts.URL+path, "application/json", strings.NewReader(string(js)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+
+	id := "phone-0001-abcd"
+	p := connect(map[string]any{"id": id, "kind": "android", "name": "Pixel 8",
+		"items": map[string]string{"shortcuts": `[{"l":"A"}]`, "padLayout": "", "evil": "x"}, "dirty": []string{"shortcuts"}})
+	expect(p, "CA ")
+	waitFor := func(cond func() bool) {
+		for i := 0; i < 200 && !cond(); i++ {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFor(func() bool { return len(s.phoneList()) == 1 })
+	list := s.phoneList()
+	if len(list) != 1 || list[0].Items["shortcuts"] != `[{"l":"A"}]` || !list[0].Connected || list[0].Name != "Pixel 8" {
+		t.Fatalf("list: %+v", list)
+	}
+	if _, ok := list[0].Items["evil"]; ok {
+		t.Fatal("unknown key stored")
+	}
+
+	// PCで変える → すぐ届く
+	if r := postJSON("/api/phones/set", map[string]any{"id": id, "items": map[string]string{"kbLayout.tp": `{"esc":[0,0,0.1,0.1,1]}`}}); r.StatusCode != 204 {
+		t.Fatalf("set: %d", r.StatusCode)
+	}
+	var cu struct {
+		Items map[string]string `json:"items"`
+	}
+	decode(expect(p, "CU "), &cu)
+	if cu.Items["kbLayout.tp"] == "" {
+		t.Fatalf("CU: %+v", cu)
+	}
+
+	// スマホで変える
+	js, _ := json.Marshal(map[string]any{"items": map[string]string{"padAreas": "[]"}})
+	p.c.Write([]byte("CFK " + base64.StdEncoding.EncodeToString(js) + "\n"))
+	expect(p, "CA ")
+	if s.phoneList()[0].Items["padAreas"] != "[]" {
+		t.Fatal("CFK not stored")
+	}
+
+	// 切断中にPCで変える → 次につないだときに届く (スマホでも変えたキーはスマホを優先)
+	p.c.Close()
+	waitNoSessions(s)
+	postJSON("/api/phones/set", map[string]any{"id": id, "items": map[string]string{"shortcuts": `[{"l":"PC"}]`, "padLayout": `{"A":[0.5,0.5,1,0,0]}`}})
+	if !s.phoneList()[0].Pending["padLayout"] {
+		t.Fatal("not pending")
+	}
+	p = connect(map[string]any{"id": id, "kind": "android", "items": map[string]string{"shortcuts": `[{"l":"phone"}]`, "padLayout": ""}, "dirty": []string{"shortcuts"}})
+	decode(expect(p, "CU "), &cu)
+	if cu.Items["padLayout"] == "" || cu.Items["shortcuts"] != "" {
+		t.Fatalf("pending CU: %+v", cu)
+	}
+	expect(p, "CA ")
+	waitFor(func() bool { return s.phoneList()[0].Items["shortcuts"] == `[{"l":"phone"}]` })
+	if got := s.phoneList()[0]; got.Items["shortcuts"] != `[{"l":"phone"}]` || len(got.Pending) != 0 {
+		t.Fatalf("merge: %+v", got)
+	}
+
+	// アプリごとの配置
+	postJSON("/api/profiles", map[string]any{"profiles": []map[string]any{{"id": "g1", "name": "ゲーム", "apps": []string{"Game.EXE"}, "items": map[string]string{"padLayout": `{"A":[0.1,0.1,1,0,0]}`}}}})
+	testFgMu.Lock()
+	testForeground = "game.exe"
+	testFgMu.Unlock()
+	s.foregroundChanged("game.exe", "Game")
+	var cp appProfile
+	decode(expect(p, "CP "), &cp)
+	if cp.Name != "ゲーム" || cp.Items["padLayout"] == "" {
+		t.Fatalf("CP: %+v", cp)
+	}
+	// スマホでその配置を変える → PCの配置が変わる
+	js, _ = json.Marshal(map[string]any{"id": "g1", "items": map[string]string{"padLayout": `{"A":[0.2,0.2,1,0,0]}`}})
+	p.c.Write([]byte("CPK " + base64.StdEncoding.EncodeToString(js) + "\n"))
+	waitFor(func() bool {
+		st := s.profileState()["profiles"].([]*appProfile)
+		return st[0].Items["padLayout"] == `{"A":[0.2,0.2,1,0,0]}`
+	})
+	if st := s.profileState()["profiles"].([]*appProfile); st[0].Items["padLayout"] != `{"A":[0.2,0.2,1,0,0]}` {
+		t.Fatalf("CPK: %+v", st[0].Items)
+	}
+	s.foregroundChanged("notepad.exe", "メモ帳")
+	if l := <-p.lines; l != "CP" {
+		t.Fatalf("clear: %q", l)
+	}
+
+	// バックアップして戻す
+	r, _ := http.Get(ts.URL + "/api/backup")
+	var bk backupFile
+	json.NewDecoder(r.Body).Decode(&bk)
+	r.Body.Close()
+	if len(bk.Phones) != 1 || len(bk.Profiles) != 1 {
+		t.Fatalf("backup: %+v", bk)
+	}
+	s.forgetPhone(id)
+	if r := postJSON("/api/restore", bk); r.StatusCode != 200 {
+		t.Fatalf("restore: %d", r.StatusCode)
+	}
+	if len(s.phoneList()) != 1 {
+		t.Fatal("restore phones")
+	}
+	p.c.Close()
+}

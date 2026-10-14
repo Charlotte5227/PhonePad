@@ -568,5 +568,7 @@ const Pad = (function () {
   return {
     prefsChanged() { lastLine = ""; if (Views.current === "padView") { layout(); draw(); sendState(); } },
     resetLayout() { store("padLayout", {}); store("padAreas", []); loadLayout(); layout(); draw(); },
+    // PC から配置が届いたとき・アプリごとの配置に切り替わったとき
+    reload() { if (editing) setEditing(false); loadLayout(); if (W) { layout(); draw(); } },
   };
 })();

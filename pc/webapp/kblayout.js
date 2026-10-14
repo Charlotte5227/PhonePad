@@ -266,10 +266,17 @@ const KbStage = (() => {
     for (const c of custom) { const p = parts.get(c.id); if (p) p.el.remove(); parts.delete(c.id); }
     custom = [];
     store("kbCustom", custom);
-    try {
-      if (all) ["tp", "oneR", "oneL"].forEach((m) => { localStorage.removeItem("pp.kbLayout." + m); localStorage.removeItem("pp.kbLayout." + m + ".land"); });
-      else localStorage.removeItem("pp.kbLayout." + cur);
-    } catch (e) {}
+    if (all) ["tp", "oneR", "oneL"].forEach((m) => { unstore("kbLayout." + m); unstore("kbLayout." + m + ".land"); });
+    else unstore("kbLayout." + cur);
+    cur = "";
+    refresh();
+  }
+  // PC から配置が届いたとき・アプリごとの配置に切り替わったとき
+  function reload() {
+    if (editing) setEditing(false);
+    for (const c of custom) { const p = parts.get(c.id); if (p) p.el.remove(); parts.delete(c.id); }
+    custom = load("kbCustom", []);
+    custom.forEach(addCustomPart);
     cur = "";
     refresh();
   }
@@ -331,5 +338,5 @@ const KbStage = (() => {
   });
 
   refresh();
-  return { refresh, get editing() { return editing; } };
+  return { refresh, reload, get editing() { return editing; } };
 })();

@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -195,4 +196,23 @@ var testUpdated []string
 func selfUpdate(url string) error {
 	testUpdated = append(testUpdated, url)
 	return nil
+}
+
+// 前に出ているアプリ (テストでは testForeground で決める)
+var (
+	testFgMu            sync.Mutex
+	testForeground      string
+	foregroundSupported = false
+)
+
+func foregroundApp() (string, string) {
+	// 手で試すとき: PHONEPAD_TEST_FG に書いたファイルの中身を「前に出ているアプリ」にする
+	if f := os.Getenv("PHONEPAD_TEST_FG"); f != "" {
+		b, _ := os.ReadFile(f)
+		n := strings.TrimSpace(string(b))
+		return n, n
+	}
+	testFgMu.Lock()
+	defer testFgMu.Unlock()
+	return testForeground, testForeground
 }

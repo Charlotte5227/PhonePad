@@ -58,6 +58,7 @@ type server struct {
 	nextID   int
 	fails    map[string][]time.Time
 	hist     *history
+	sync     *syncStore
 }
 
 // --background: Windows起動時の自動起動用。ウィンドウもブラウザも開かずに動く
@@ -129,6 +130,7 @@ func main() {
 	go s.runWebApp()
 	initGamepadSystem()
 	startGUI(s)
+	go s.watchForeground()
 
 	fmt.Printf(" PC名      : %s\n", s.pcName)
 	fmt.Printf(" 接続コード: %s\n", s.code())
@@ -226,6 +228,7 @@ func (s *server) loadConfig() {
 	}
 	s.saveConfig()
 	s.hist = newHistory(dir)
+	s.sync = newSyncStore(dir)
 	if c, fp, err := loadOrCreateCert(dir); err == nil {
 		s.cert, s.certFP = c, fp
 	} else {
@@ -494,6 +497,7 @@ func (s *server) statusMux() *http.ServeMux {
 		initGamepadSystem()
 		w.WriteHeader(http.StatusNoContent)
 	})
+	s.syncAPI(mux)
 	return mux
 }
 

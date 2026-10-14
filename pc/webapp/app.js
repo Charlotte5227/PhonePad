@@ -37,9 +37,23 @@ function b64urlBytes(s) {
   for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
   return b;
 }
-function store(k, v) { try { localStorage.setItem("pp." + k, JSON.stringify(v)); } catch (e) {} }
+function rawStore(k, s) { try { if (s === "" || s == null) localStorage.removeItem("pp." + k); else localStorage.setItem("pp." + k, s); } catch (e) {} }
+function rawLoad(k) { try { return localStorage.getItem("pp." + k) || ""; } catch (e) { return ""; } }
+// 配置・ショートカットは PC とやりとりする (Sync)。アプリごとの配置を使っている間は、そちらを読み書きする
+const SYNC_RE = /^(shortcuts|kbCustom|padLayout|padAreas|kbLayout\.[A-Za-z]{2,8}(\.land)?)$/;
+function store(k, v) {
+  const s = JSON.stringify(v);
+  if (SYNC_RE.test(k)) { Sync.write(k, s); return; }
+  rawStore(k, s);
+}
+function unstore(k) {
+  if (SYNC_RE.test(k)) { Sync.write(k, ""); return; }
+  rawStore(k, "");
+}
 function load(k, def) {
-  try { const v = localStorage.getItem("pp." + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; }
+  const s = SYNC_RE.test(k) && Sync.overlay && k in Sync.overlay.items ? Sync.overlay.items[k] : rawLoad(k);
+  if (!s) return def;
+  try { return JSON.parse(s); } catch (e) { return def; }
 }
 let toastTimer = 0;
 function toast(msg) {
@@ -247,6 +261,99 @@ const Link = {
 
   send(line) { if (this.ready) this.main.send("L", enc.encode(line)); },
 };
+
+// ---------------------------------------------------------------- 設定のやりとり (PC の画面から変えられるように)
+// スマホで変えた分は「まだ伝えていない」印をつけておき、つないだときにまとめて送る。
+const Sync = {
+  overlay: null, // PC で前に出ているアプリ用の配置 {id, name, items}
+  ready: false,
+  pending: {}, timer: 0,
+  isKey(k) { return SYNC_RE.test(k); },
+  deviceId() {
+    let id = rawLoad("deviceId");
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+      const b = new Uint8Array(12);
+      crypto.getRandomValues(b);
+      id = "w-" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      rawStore("deviceId", id);
+    }
+    return id;
+  },
+  dirty() { try { return JSON.parse(rawLoad("syncDirty") || "[]"); } catch (e) { return []; } },
+  setDirty(list) { rawStore("syncDirty", list.length ? JSON.stringify(list) : ""); },
+  write(k, s) {
+    if (this.overlay && k in this.overlay.items) {
+      this.overlay.items[k] = s;
+      Link.send("CPK " + b64(JSON.stringify({ id: this.overlay.id, items: { [k]: s } })));
+      return;
+    }
+    rawStore(k, s);
+    const d = this.dirty();
+    if (!d.includes(k)) { d.push(k); this.setDirty(d); }
+    // つながっていればすぐ伝える (続けて変えたときはまとめる)
+    if (this.ready && Link.ready) {
+      this.pending[k] = s;
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => {
+        const items = this.pending;
+        this.pending = {};
+        if (Object.keys(items).length) Link.send("CFK " + b64(JSON.stringify({ items })));
+      }, 250);
+    }
+  },
+  items() {
+    const out = { shortcuts: "", kbCustom: "", padLayout: "", padAreas: "" };
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("pp.") && this.isKey(k.slice(3))) out[k.slice(3)] = localStorage.getItem(k) || "";
+      }
+    } catch (e) {}
+    return out;
+  },
+  onOpen() {
+    this.ready = true;
+    Link.send("CFG " + b64(JSON.stringify({ id: this.deviceId(), kind: "web", name: deviceName(), items: this.items(), dirty: this.dirty() })));
+  },
+  // 画面を作り直す
+  reload() {
+    if (typeof KbStage !== "undefined") KbStage.reload();
+    if (window.Pad && Pad.reload) Pad.reload();
+    shortcuts = load("shortcuts", null) || DEFAULT_SC.map((s) => Object.assign({}, s));
+  },
+};
+Link.onState.push((s) => {
+  if (s === "open") Sync.onOpen();
+  else {
+    Sync.ready = false;
+    if (Sync.overlay) { Sync.overlay = null; Sync.reload(); }
+  }
+});
+Link.on("CA ", (b) => {
+  let keys; try { keys = JSON.parse(unb64(b)); } catch (e) { return; }
+  Sync.setDirty(Sync.dirty().filter((k) => !keys.includes(k)));
+});
+Link.on("CU ", (b) => {
+  let o; try { o = JSON.parse(unb64(b)); } catch (e) { return; }
+  for (const [k, v] of Object.entries(o.items || {})) if (Sync.isKey(k)) rawStore(k, v);
+  Sync.reload();
+  toast("PCの画面で変えた設定を受け取りました");
+});
+Link.on("CP", (rest) => {
+  const b = rest.trim();
+  const before = Sync.overlay;
+  if (!b) {
+    Sync.overlay = null;
+    if (before) toast("いつもの配置に戻しました");
+  } else {
+    let o; try { o = JSON.parse(unb64(b)); } catch (e) { return; }
+    const items = {};
+    for (const [k, v] of Object.entries(o.items || {})) if (Sync.isKey(k)) items[k] = v;
+    Sync.overlay = { id: o.id, name: o.name || "", items };
+    if (!before || before.id !== o.id) toast("PCで使っているアプリに合わせて、「" + Sync.overlay.name + "」の配置にしました");
+  }
+  Sync.reload();
+});
 
 // nonce = 向き(1バイト) + 通し番号(8バイト, 大きい桁から) + 0
 function nonce(dir, n) {

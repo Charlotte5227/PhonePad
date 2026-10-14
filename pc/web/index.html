@@ -103,6 +103,87 @@
   .filters button { font-size: 13px; padding: 3px 12px; border-radius: 99px; }
   .filters button.on { background: var(--accent); color: var(--card); border-color: var(--accent); }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .page.wide { max-width: 1000px; }
+  input[type=text], input[type=search], select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; max-width: 100%; }
+  input[type=text], input[type=search] { width: 100%; }
+  .lab { display: block; font-size: 13px; color: var(--sub); margin: 10px 0 4px; }
+  .check.inline { display: inline-flex; margin: 0 14px 0 0; align-items: center; }
+  .check.inline input { margin-top: 0; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+
+  /* スマホの一覧 */
+  .phonelist { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  .phonechip { display: flex; align-items: center; gap: 10px; text-align: left; padding: 8px 14px; border-radius: 12px; background: var(--card); }
+  .phonechip b { display: block; font-size: 14px; }
+  .phonechip small { color: var(--sub); font-size: 12px; }
+  .phonechip.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+  .dot.live { background: var(--ok); }
+  .tabs2 { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin: 6px 0 16px; flex-wrap: wrap; }
+  .tabs2 button { border: 0; border-radius: 0; background: none; padding: 8px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--sub); }
+  .tabs2 button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips button { padding: 4px 12px; border-radius: 99px; font-size: 13px; }
+  .chips button.on { background: var(--accent); color: var(--card); border-color: var(--accent); }
+  .savebar { display: flex; gap: 8px; align-items: center; justify-content: flex-end; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px;
+    position: sticky; bottom: 0; background: var(--card); padding-bottom: 4px; }
+  .savemsg { flex: 1; color: var(--sub); font-size: 13px; }
+  .sub { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .sub:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+
+  /* ★ショートカット */
+  .scwrap { display: grid; grid-template-columns: 1fr 300px; gap: 18px; margin-top: 12px; }
+  .scgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; align-content: start; }
+  .sc { text-align: left; padding: 7px 10px; min-height: 52px; }
+  .sc b { display: block; font-size: 14px; font-weight: 600; }
+  .sc small { display: block; color: var(--sub); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sc.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .sc.add { border-style: dashed; color: var(--sub); }
+  .scform { background: var(--bg); border-radius: 12px; padding: 14px; align-self: start; }
+  .capture { width: 100%; border-style: dashed; padding: 10px; margin: 0 0 6px; }
+  .capture.listening { border: 2px solid var(--accent); color: var(--accent); }
+  .applist { max-height: 50vh; overflow: auto; display: grid; gap: 4px; margin-top: 10px; }
+  .applist button { text-align: left; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; }
+  .modal .box { background: var(--card); border-radius: 14px; padding: 20px; width: min(520px, 92vw); }
+
+  /* 配置の編集 (スマホの画面はいつも暗い色) */
+  .kbwrap, .padwrap { display: grid; grid-template-columns: auto 1fr; gap: 22px; margin-top: 14px; align-items: start; }
+  .padwrap { grid-template-columns: 1fr 230px; }
+  .kbside { min-width: 0; }
+  .phone { background: #0d0b0a; border-radius: 26px; padding: 12px; width: max-content; }
+  .phone.land { width: auto; }
+  .kbstage { position: relative; width: 320px; height: 620px; background: #1b1815; border-radius: 12px; touch-action: none; user-select: none; }
+  .webp .kbstage { height: 560px; }
+  .kbstage.land { width: 580px; height: 262px; }
+  .kbpart { position: absolute; display: grid; place-items: center; text-align: center; background: #332d27; border: 1px solid #4e453c;
+    border-radius: 7px; color: #f1ebe4; font-size: 12px; line-height: 1.2; overflow: hidden; cursor: grab; }
+  .kbpart.big { background: #26221e; color: rgba(241,235,228,.5); font-size: 15px; font-weight: 700; }
+  .kbpart.off { opacity: .35; border-style: dashed; }
+  .kbpart.sel { outline: 2px solid #e0a35a; outline-offset: -1px; z-index: 2; opacity: 1; }
+  .kbpart span { pointer-events: none; padding: 0 2px; }
+  .kbhandle { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #e0a35a; border: 3px solid #1b1815; z-index: 3; cursor: nwse-resize; }
+  .padsvg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; }
+  .padsvg .padbg { fill: #1b1815; }
+  .padsvg .pb { fill: #332d27; stroke: #4e453c; stroke-width: 1.5; }
+  .padsvg .pb.stick { fill: rgba(51,45,39,.6); }
+  .padsvg text { fill: #f1ebe4; font: 600 14px "Yu Gothic UI", sans-serif; pointer-events: none; }
+  .padsvg .part { cursor: grab; }
+  .padsvg .part.off { opacity: .3; }
+  .padsvg .part.sel .pb { stroke: #e0a35a; stroke-width: 3; }
+  .padsvg .area { fill: rgba(224,163,90,.18); stroke: #e0a35a; stroke-dasharray: 6 4; cursor: pointer; }
+  .padsvg .area.sel { fill: rgba(224,163,90,.35); }
+  .padsvg .areatext { fill: #e0a35a; font-size: 18px; }
+  .padsvg .drawing { fill: rgba(224,163,90,.2); stroke: #e0a35a; stroke-width: 2; }
+
+  /* アプリごとの配置 */
+  .fglive { background: var(--accent-soft); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+  .prof.active { border-color: var(--ok); }
+  .appchip { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 99px; padding: 1px 4px 1px 10px; font-size: 13px; }
+  .appchip .x { border: 0; padding: 0 6px; background: none; color: var(--sub); }
+  .prof select { margin-top: 8px; }
+  @media (max-width: 980px) { .scwrap, .padwrap { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -111,6 +192,9 @@
   <div class="state" id="state">接続を待っています</div>
   <a href="#connect" data-p="connect">📱 つなぐ</a>
   <a href="#history" data-p="history">🕘 接続中・履歴 <span class="n" id="navCount" hidden>0</span></a>
+  <a href="#phones" data-p="phones">📲 スマホの設定</a>
+  <a href="#profiles" data-p="profiles">🎮 アプリごとの配置</a>
+  <a href="#backup" data-p="backup">💾 バックアップ</a>
   <a href="#settings" data-p="settings">⚙ 設定</a>
   <div class="grow"></div>
   <div class="ver" id="curVer"></div>
@@ -209,6 +293,56 @@
     </section>
   </div>
 
+  <!-- ======== スマホの設定 ======== -->
+  <div class="page wide" id="p-phones" hidden>
+    <h1>スマホの設定</h1>
+    <p class="lead">つないだことのあるスマホの ★ショートカット、キーボード画面とコントローラーの配置を、PCの大きな画面で変えられます。</p>
+    <p class="note" id="phonesEmpty" hidden>まだありません。スマホの PhonePad でこのPCにつなぐと、ここに出ます（アプリ・ブラウザ版とも v2.1.0 以降）。</p>
+    <div class="phonelist" id="phoneList"></div>
+    <section class="card" id="phoneBody"></section>
+  </div>
+
+  <!-- ======== アプリごとの配置 ======== -->
+  <div class="page wide" id="p-profiles" hidden>
+    <h1>アプリごとの配置</h1>
+    <p class="lead">PCで決まったアプリ（ゲームなど）が前に出ている間だけ、スマホの配置を自動で切り替えます。そのアプリから離れると、いつもの配置に戻ります。</p>
+    <label class="check"><input type="checkbox" id="autoSwitch"><span>アプリに合わせて配置を切り替える</span></label>
+    <p class="fglive" id="profLive"></p>
+    <div id="profList"></div>
+  </div>
+
+  <!-- ======== バックアップ ======== -->
+  <div class="page" id="p-backup" hidden>
+    <h1>バックアップ</h1>
+    <p class="lead">スマホの配置・★ショートカットと、アプリごとの配置をファイルに保存しておけます。スマホを替えたときや、PCを入れ替えたときに戻せます。</p>
+    <section class="card">
+      <h2>ファイルに保存する</h2>
+      <p class="note" style="margin-top:0">つないだことのあるすべてのスマホの設定と、アプリごとの配置を1つのファイルに保存します。</p>
+      <div class="actions"><a class="btnlink" href="/api/backup" download>バックアップを保存</a></div>
+    </section>
+    <section class="card">
+      <h2>ファイルから戻す</h2>
+      <p class="note" style="margin-top:0">保存したファイルを選ぶと、その内容に戻します。つながっているスマホにはすぐ、ほかのスマホには次につないだときに届きます。</p>
+      <div class="actions"><input type="file" id="restoreFile" accept=".json,application/json"></div>
+      <p class="note" id="restoreMsg"></p>
+    </section>
+    <section class="card">
+      <h2>スマホを替えたとき（設定を写す）</h2>
+      <p class="note" style="margin-top:0">新しいスマホを一度このPCにつないでから、古いスマホの設定を写してください。</p>
+      <p class="note" id="cpNone">写すには、2台以上のスマホをつないだことが必要です。</p>
+      <div id="cpBox">
+        <div class="actions"><span>写す元</span><select id="cpFrom"></select></div>
+        <div class="actions"><span>写す先</span><select id="cpTo"></select></div>
+        <div class="actions" id="cpParts">
+          <label class="check inline"><input type="checkbox" value="sc" checked><span>★ショートカット</span></label>
+          <label class="check inline"><input type="checkbox" value="kb" checked><span>キーボード画面の配置</span></label>
+          <label class="check inline"><input type="checkbox" value="pad" checked><span>コントローラーの配置</span></label>
+        </div>
+        <div class="actions"><button class="primary" id="cpGo">写す</button><span class="note" id="cpMsg"></span></div>
+      </div>
+    </section>
+  </div>
+
   <!-- ======== 設定 ======== -->
   <div class="page" id="p-settings" hidden>
     <h1>設定</h1>
@@ -247,19 +381,30 @@
 </main>
 
 <script src="qrcode.js"></script>
+<script src="editors.js"></script>
+<script src="manage.js"></script>
 <script>
   "use strict";
   let lastQR = "", lastSite = null, lastDevs = "", lastWeb = null, lastHist = "", histFilter = "";
   const $ = (id) => document.getElementById(id);
 
   // ---- ページの切り替え ----
-  const PAGES = ["connect", "history", "settings"];
+  const PAGES = ["connect", "history", "phones", "profiles", "backup", "settings"];
+  let curPage = "";
   function showPage() {
     const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "connect";
+    if (p === curPage) return;
+    // 保存していない変更があるときは確かめる
+    if (curPage && !Manage.leaveOK()) { history.replaceState(null, "", "#" + curPage); return; }
+    Manage.clear();
+    curPage = p;
     for (const id of PAGES) $("p-" + id).hidden = id !== p;
     document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("on", a.dataset.p === p));
     document.querySelector("main").scrollTop = 0;
     if (p === "history") loadHistory();
+    if (p === "phones") Manage.showPhones();
+    if (p === "profiles") Manage.showProfiles();
+    if (p === "backup") Manage.showBackup();
   }
   window.addEventListener("hashchange", showPage);
 
@@ -292,7 +437,7 @@
       $("pcName").textContent = s.pcName;
       $("ips").textContent = s.ips.join(", ") + "（ポート " + s.port + "）";
       const list = s.deviceList || [];
-      renderDevices(list);
+      if (renderDevices(list) && !$("p-phones").hidden && !Manage.dirty) Manage.showPhones();
       const n = list.length;
       $("devSummary").textContent = n === 0 ? "なし" : list.map((d) => d.name).join("、");
       $("state").textContent = n === 0 ? "接続を待っています" : n === 1 ? list[0].name + " が接続中" : "スマホ " + n + " 台が接続中";
@@ -331,7 +476,8 @@
   // 接続中のスマホの一覧 (変わったときだけ描き直す)
   function renderDevices(list) {
     const key = JSON.stringify(list);
-    if (key === lastDevs) return;
+    if (key === lastDevs) return false;
+    const first = lastDevs === "";
     lastDevs = key;
     const ul = $("devices");
     ul.textContent = "";
@@ -340,7 +486,7 @@
       li.className = "empty";
       li.textContent = "いま接続しているスマホはありません。";
       ul.appendChild(li);
-      return;
+      return !first;
     }
     for (const d of list) {
       const li = document.createElement("li");
@@ -361,6 +507,7 @@
       li.append(who, b);
       ul.appendChild(li);
     }
+    return !first;
   }
 
   // ---- 履歴 ----
@@ -481,6 +628,7 @@
     document.body.innerHTML = '<main><div class="page"><h1>PhonePad を終了しました</h1><p class="lead">このウィンドウは閉じて構いません。</p></div></main>';
   };
 
+  Manage.init();
   showPage();
   refresh();
   setInterval(refresh, 2000);

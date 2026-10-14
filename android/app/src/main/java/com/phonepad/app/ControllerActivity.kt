@@ -75,8 +75,16 @@ class ControllerActivity : Activity() {
         Link.removeListener(linkListener)
     }
 
+    /** PC から配置が届いた・アプリごとの配置に切り替わった */
+    private val syncListener: () -> Unit = {
+        view.abandonEditing()
+        view.reloadPrefs()
+    }
+
     override fun onResume() {
         super.onResume()
+        ConfigSync.listeners.add(syncListener)
+        ConfigSync.onNotice = { android.widget.Toast.makeText(this, it, android.widget.Toast.LENGTH_SHORT).show() }
         view.reloadPrefs()
         view.error = null
         Link.onGamepadError = { msg ->
@@ -90,6 +98,8 @@ class ControllerActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        ConfigSync.listeners.remove(syncListener)
+        ConfigSync.onNotice = null
         Link.onRumble = null
         Haptics.rumble(0, 0)
         view.releaseAll()
@@ -751,6 +761,18 @@ class ControllerView(
         editing = true
         selected = null
         Toast.makeText(context, "部品をドラッグで移動、2本指で大きさを変えられます", Toast.LENGTH_LONG).show()
+        invalidate()
+    }
+
+    /** 保存せずに配置の変更をやめる (PC から別の配置が届いたとき) */
+    fun abandonEditing() {
+        if (!editing) return
+        editing = false
+        drawingKey = null
+        drawPts = null
+        selected = null
+        dragging = false
+        pinching = false
         invalidate()
     }
 

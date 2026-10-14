@@ -27,6 +27,15 @@ object Prefs {
     private fun i(key: String, def: Int) = sp.getInt(key, def)
     private fun s(key: String, def: String) = sp.getString(key, def) ?: def
 
+    /** PC とやりとりする設定: アプリごとの配置を使っている間はそちらを読み、保存は ConfigSync を通す */
+    private fun synced(key: String, def: String): String =
+        ConfigSync.read(key)?.ifEmpty { def } ?: s(key, def)
+
+    fun rawGet(key: String): String? = sp.getString(key, null)
+    fun rawPut(key: String, v: String?) {
+        if (v == null) sp.edit().remove(key).apply() else sp.edit().putString(key, v).apply()
+    }
+
     // ---- マウス ----
     var mouseSpeed: Float
         get() = f("mouseSpeed", 1.5f)
@@ -72,15 +81,13 @@ object Prefs {
         get() = b("fieldAlways", false)
 
     /** キーボード画面の配置 (JSON: {部品: [x, y, 幅, 高さ, 隠す]})。mode = tp / stick / oneR / oneL */
-    fun kbLayout(mode: String): String = s("kbLayout.$mode", "")
-    fun setKbLayout(mode: String, v: String?) {
-        if (v == null) sp.edit().remove("kbLayout.$mode").apply() else sp.edit().putString("kbLayout.$mode", v).apply()
-    }
+    fun kbLayout(mode: String): String = synced("kbLayout.$mode", "")
+    fun setKbLayout(mode: String, v: String?) = ConfigSync.write("kbLayout.$mode", v)
 
     /** キーボード画面に自分で追加したキー (JSON 配列) */
     var kbCustom: String
-        get() = s("kbCustom", "[]")
-        set(v) = sp.edit().putString("kbCustom", v).apply()
+        get() = synced("kbCustom", "[]")
+        set(v) = ConfigSync.write("kbCustom", v)
 
     // ---- コントローラー ----
     var turboRate: Int
@@ -99,8 +106,8 @@ object Prefs {
 
     /** コントローラーの配置 "id:x,y,s;..." (空なら初期配置) */
     var padLayout: String
-        get() = s("padLayout", "")
-        set(v) = sp.edit().putString("padLayout", v).apply()
+        get() = synced("padLayout", "")
+        set(v) = ConfigSync.write("padLayout", v)
 
     /** ゲームの振動をスマホで再現する */
     var rumble: Boolean
@@ -125,8 +132,8 @@ object Prefs {
     // ---- ショートカット ----
     /** JSON配列 [{"l":名前,"k":キー,"m":修飾}] (空なら初期のもの) */
     var shortcuts: String
-        get() = s("shortcuts", "")
-        set(v) = sp.edit().putString("shortcuts", v).apply()
+        get() = synced("shortcuts", "")
+        set(v) = ConfigSync.write("shortcuts", v)
 
     // ---- 画面表示 ----
     /** 0=低画質(速い) 1=標準 2=高画質 */
@@ -169,12 +176,12 @@ object Prefs {
     /** 配置のプリセット (JSON: {名前: 配置文字列}) */
     /** コントローラーの自由な形のエリア (JSON) */
     var padAreas: String
-        get() = s("padAreas", "[]")
-        set(v) = sp.edit().putString("padAreas", v).apply()
+        get() = synced("padAreas", "[]")
+        set(v) = ConfigSync.write("padAreas", v)
 
     var padPresets: String
-        get() = s("padPresets", "{}")
-        set(v) = sp.edit().putString("padPresets", v).apply()
+        get() = synced("padPresets", "{}")
+        set(v) = ConfigSync.write("padPresets", v)
 
     // ---- 共通 ----
     var vibrate: Boolean

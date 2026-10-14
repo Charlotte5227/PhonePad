@@ -764,6 +764,8 @@ class RemoteActivity : Activity() {
             pcField.update(it)
             pcField2.update(it)
         }
+        ConfigSync.listeners.add(syncListener)
+        ConfigSync.onNotice = { toast(it) }
         // 設定画面などで配置や操作の種類が変わっていることがあるので、作り直す
         if (!stage.editing && !typingNow()) {
             customs = loadCustoms()
@@ -788,8 +790,17 @@ class RemoteActivity : Activity() {
         )
     }
 
+    /** PC から配置が届いた・アプリごとの配置に切り替わった */
+    private val syncListener: () -> Unit = {
+        if (stage.editing) setEditing(false)
+        customs = loadCustoms()
+        buildStage()
+    }
+
     override fun onPause() {
         super.onPause()
+        ConfigSync.listeners.remove(syncListener)
+        if (ConfigSync.onNotice != null) ConfigSync.onNotice = null
         resumed = false
         handler.removeCallbacks(fieldPoll)
         handler.removeCallbacks(quickQuery)

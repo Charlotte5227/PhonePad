@@ -33,6 +33,10 @@ type session struct {
 	fieldMu sync.Mutex    // 入力欄の問い合わせを1つずつ処理する
 	pressed map[byte]bool // 押しっぱなしのマウスボタン
 	pad     *gamepad
+
+	// 設定のやりとり (srv.mu で守る)
+	devID string
+	cfgOK bool
 }
 
 func (s *server) handleConn(c net.Conn) {
@@ -353,6 +357,21 @@ func (ss *session) handleLine(line string) {
 		}
 		if ss.pad != nil && ss.pad.dead {
 			ss.pad = nil // 次回もう一度ドライバーを確認する
+		}
+
+	case "CFG": // スマホの設定 (つないだ直後)
+		if len(f) >= 2 {
+			ss.handleCFG(f[1])
+		}
+
+	case "CFK": // スマホで設定を変えた
+		if len(f) >= 2 {
+			ss.handleCFK(f[1])
+		}
+
+	case "CPK": // アプリごとの配置をスマホで変えた
+		if len(f) >= 2 {
+			ss.handleCPK(f[1])
 		}
 
 	case "RA": // 全部離す (アプリがバックグラウンドへ)

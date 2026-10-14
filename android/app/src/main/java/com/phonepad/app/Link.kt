@@ -301,6 +301,8 @@ object Link {
         host = r.host
         queue.clear()
         setState(State.CONNECTED)
+        // 配置・ショートカットを PC とやりとりする
+        ConfigSync.onConnected()
 
         val alive = AtomicBoolean(true)
         val writer = thread(name = "link-w", isDaemon = true) {
@@ -342,6 +344,7 @@ object Link {
                 val line = rd.readLine() ?: break
                 when {
                     line == "PONG" -> {}
+                    ConfigSync.handle(line) { unb64(it) } -> {}
                     line == "BYE" -> {
                         // PCの画面で「切断」された: 自動でつなぎ直さない
                         kicked = true
@@ -413,6 +416,7 @@ object Link {
         }
         writer.interrupt()
         pinger.interrupt()
+        ConfigSync.onDisconnected()
         if (socket === s) socket = null
         if (kicked && gen == generation) {
             generation++
