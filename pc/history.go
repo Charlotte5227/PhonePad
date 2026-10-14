@@ -15,7 +15,7 @@ const historyMax = 300
 
 type histEntry struct {
 	Time   time.Time `json:"t"`
-	Kind   string    `json:"k"` // connect / disconnect / reject / power / kick / newcode
+	Kind   string    `json:"k"` // connect / disconnect / reject / power / kick / newcode / file
 	Device string    `json:"d,omitempty"`
 	IP     string    `json:"ip,omitempty"`
 	Detail string    `json:"x,omitempty"`

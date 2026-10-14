@@ -39,8 +39,16 @@ object Link {
     var lastError: String? = null
         private set
 
+    /** アプリが画面に出ているか。出ていない間は PING の間隔を長くする (PC が v2.2 以降のとき) */
     @Volatile
     var foreground = true
+        set(v) {
+            if (field == v) return
+            field = v
+            if (bgSupported()) send("BG ${if (v) 0 else 1}")
+        }
+
+    private fun bgSupported() = pcVersion.isNotEmpty() && !Updater.isNewer("2.2.0", pcVersion)
 
     /** PC側でコントローラーが使えなかったときの理由 */
     var onGamepadError: ((String) -> Unit)? = null
@@ -112,6 +120,16 @@ object Link {
     /** 1行送る (未接続なら捨てる) */
     fun send(line: String) {
         if (state == State.CONNECTED) queue.offer(line)
+    }
+
+    /** 大きなデータ (ファイル) 用: 送りきれていない分がたまっていたら待つ。切断されたら false */
+    fun sendBlocking(line: String): Boolean {
+        while (queue.size > 16) {
+            if (state != State.CONNECTED) return false
+            Thread.sleep(10)
+        }
+        if (state != State.CONNECTED) return false
+        return queue.offer(line, 5, TimeUnit.SECONDS)
     }
 
     /**
@@ -303,6 +321,8 @@ object Link {
         setState(State.CONNECTED)
         // 配置・ショートカットを PC とやりとりする
         ConfigSync.onConnected()
+        if (!foreground && bgSupported()) send("BG 1")
+        if (Prefs.clipAuto) send("CLA 1")
 
         val alive = AtomicBoolean(true)
         val writer = thread(name = "link-w", isDaemon = true) {
@@ -328,13 +348,26 @@ object Link {
             }
         }
         val pinger = thread(name = "link-p", isDaemon = true) {
-            while (alive.get()) {
-                queue.offer("PING")
-                try {
-                    Thread.sleep(1000)
-                } catch (_: InterruptedException) {
-                    break
+            // アプリが画面に出ていない間は 15 秒ごと (電池のため)。そのぶん返事を待つ時間も長くする
+            var lastBg = false
+            try {
+                while (alive.get()) {
+                    val bg = !foreground && bgSupported()
+                    if (bg != lastBg) {
+                        lastBg = bg
+                        try {
+                            s.soTimeout = if (bg) 60000 else 5000
+                        } catch (_: Exception) {
+                        }
+                    }
+                    queue.offer("PING")
+                    val until = System.currentTimeMillis() + if (bg) 15000 else 1000
+                    while (System.currentTimeMillis() < until && alive.get()) {
+                        Thread.sleep(200)
+                        if (bg && foreground) break // 画面に戻ったらすぐ
+                    }
                 }
+            } catch (_: InterruptedException) {
             }
         }
         var kicked = false
@@ -345,6 +378,8 @@ object Link {
                 when {
                     line == "PONG" -> {}
                     ConfigSync.handle(line) { unb64(it) } -> {}
+                    // PC から届くもの (お知らせ・ページ・ファイル・スマホを探す・クリップボード)
+                    PcActions.handle(line) { unb64(it) } -> {}
                     line == "BYE" -> {
                         // PCの画面で「切断」された: 自動でつなぎ直さない
                         kicked = true
@@ -417,6 +452,7 @@ object Link {
         writer.interrupt()
         pinger.interrupt()
         ConfigSync.onDisconnected()
+        PcActions.onDisconnected()
         if (socket === s) socket = null
         if (kicked && gen == generation) {
             generation++

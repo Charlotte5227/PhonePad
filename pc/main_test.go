@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -902,4 +904,154 @@ func TestConfigSync(t *testing.T) {
 		t.Fatal("restore phones")
 	}
 	p.c.Close()
+}
+
+// ファイルのやりとり・お知らせ・スマホで開く・鳴らす・クリップボードの自動共有
+func TestPhoneActions(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	recv := t.TempDir()
+	t.Setenv("PHONEPAD_RECV_DIR", recv)
+	s := &server{sessions: map[*session]struct{}{}, fails: map[string][]time.Time{}, pcName: "T"}
+	s.loadConfig()
+	t.Cleanup(func() { waitNoSessions(s) })
+	ts := httptest.NewServer(s.statusMux())
+	defer ts.Close()
+
+	a, b := net.Pipe()
+	go s.handleConn(a)
+	br := bufio.NewReader(b)
+	go b.Write([]byte("HELLO " + s.code() + " " + base64.StdEncoding.EncodeToString([]byte("Pixel")) + " 1\n"))
+	if l, _ := br.ReadString('\n'); !strings.HasPrefix(l, "OK") {
+		t.Fatal(l)
+	}
+	lines := make(chan string, 64)
+	go func() {
+		for {
+			l, err := br.ReadString('\n')
+			if err != nil {
+				close(lines)
+				return
+			}
+			l = strings.TrimSpace(l)
+			if l != "PONG" && !strings.HasPrefix(l, "MI ") {
+				lines <- l
+			}
+		}
+	}()
+	next := func() string {
+		select {
+		case l := <-lines:
+			return l
+		case <-time.After(3 * time.Second):
+			t.Fatal("no line")
+		}
+		return ""
+	}
+	send := func(l string) { b.Write([]byte(l + "\n")) }
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+	// スマホ → PC のファイル
+	body := strings.Repeat("あいうえお", 20000) // 30万バイトほど
+	send("FS f1 " + b64(`{"n":"../写真.jpg","s":300000}`))
+	for i := 0; i < len(body); i += 32768 {
+		e := i + 32768
+		if e > len(body) {
+			e = len(body)
+		}
+		send("FD f1 " + b64(body[i:e]))
+	}
+	send("FE f1")
+	if l := next(); l != "FK f1 ok" {
+		t.Fatalf("FK: %s", l)
+	}
+	got, err := os.ReadFile(filepath.Join(recv, "写真.jpg"))
+	if err != nil || string(got) != body {
+		t.Fatalf("file: %v %d", err, len(got))
+	}
+	// 同じ名前は (2) になる
+	send("FS f2 " + b64(`{"n":"写真.jpg","s":1}`))
+	send("FD f2 " + b64("x"))
+	send("FE f2")
+	next()
+	if _, err := os.Stat(filepath.Join(recv, "写真 (2).jpg")); err != nil {
+		t.Fatal("unique name")
+	}
+
+	// PC → スマホ のファイル
+	sid := s.sessionsByID(nil)[0].id
+	done := make(chan int, 1)
+	go func() {
+		r, err := http.Post(ts.URL+"/api/send/file?to="+strconv.Itoa(sid)+"&name=memo.txt", "application/octet-stream", strings.NewReader(body))
+		if err != nil {
+			done <- 0
+			return
+		}
+		done <- r.StatusCode
+	}()
+	l := next()
+	if !strings.HasPrefix(l, "FS ") {
+		t.Fatalf("FS: %s", l)
+	}
+	id := strings.Fields(l)[1]
+	var all strings.Builder
+	for {
+		l = next()
+		if strings.HasPrefix(l, "FE ") {
+			break
+		}
+		d, _ := base64.StdEncoding.DecodeString(strings.Fields(l)[2])
+		all.Write(d)
+	}
+	if all.String() != body {
+		t.Fatal("phone got wrong data")
+	}
+	send("FK " + id + " ok")
+	if c := <-done; c != 204 {
+		t.Fatalf("send file: %d", c)
+	}
+
+	// お知らせ・スマホで開く・鳴らす
+	postJSON := func(path, js string) int {
+		r, err := http.Post(ts.URL+path, "application/json", strings.NewReader(js))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Body.Close()
+		return r.StatusCode
+	}
+	postJSON("/api/send/notify", `{"title":"T","text":"終わりました"}`)
+	if l := next(); !strings.HasPrefix(l, "NT ") || !strings.Contains(unb64s(l[3:]), "終わりました") {
+		t.Fatalf("NT: %s", l)
+	}
+	postJSON("/api/send/open", `{"url":"example.com/a"}`)
+	if l := next(); unb64s(strings.TrimPrefix(l, "OU ")) != "https://example.com/a" {
+		t.Fatalf("OU: %s", l)
+	}
+	if c := postJSON("/api/send/open", `{"url":"javascript:alert(1)"}`); c != 400 {
+		t.Fatalf("bad url: %d", c)
+	}
+	postJSON("/api/send/ring", "")
+	if l := next(); l != "RING 1" {
+		t.Fatalf("RING: %s", l)
+	}
+
+	// クリップボードの自動共有 (送り返さない)
+	send("CLA 1")
+	send("CB " + b64("スマホの文"))
+	if l := next(); l != "CK" {
+		t.Fatalf("CK: %s", l)
+	}
+	s.clipboardChanged() // PCに入れたのはスマホの文 → 送り返さない
+	testClip = "PCの文"
+	s.clipboardChanged()
+	if l := next(); unb64s(strings.TrimPrefix(l, "CTA ")) != "PCの文" {
+		t.Fatalf("CTA: %s", l)
+	}
+	// アプリを閉じている間は、待つ時間が長い
+	send("BG 1")
+	time.Sleep(100 * time.Millisecond)
+	if d := s.sessionsByID(nil)[0].readTimeout(); d < 30*time.Second {
+		t.Fatalf("bg timeout: %v", d)
+	}
+	b.Close()
 }

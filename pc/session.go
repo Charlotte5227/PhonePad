@@ -37,6 +37,8 @@ type session struct {
 	// 設定のやりとり (srv.mu で守る)
 	devID string
 	cfgOK bool
+
+	sessionExtra
 }
 
 func (s *server) handleConn(c net.Conn) {
@@ -98,6 +100,7 @@ func (s *server) handleConn(c net.Conn) {
 	guiRefresh()
 
 	defer func() {
+		ss.cleanupTransfers()
 		ss.releaseAll()
 		if ss.pad != nil {
 			ss.pad.close()
@@ -112,7 +115,7 @@ func (s *server) handleConn(c net.Conn) {
 
 	for {
 		// スマホは1秒ごとにPINGを送る。4秒途絶えたら切断扱いにして入力を全部離す
-		_ = c.SetReadDeadline(time.Now().Add(4 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(ss.readTimeout()))
 		if !sc.Scan() {
 			return
 		}
@@ -168,6 +171,7 @@ func (ss *session) handleLine(line string) {
 	case "CB": // スマホのクリップボードの内容をPCへ
 		if len(f) >= 2 {
 			if b, err := base64.StdEncoding.DecodeString(f[1]); err == nil {
+				ss.srv.clipFromPhone(string(b))
 				if err := setClipboardText(string(b)); err != nil {
 					ss.send("ER " + base64.StdEncoding.EncodeToString([]byte(err.Error())))
 				} else {
@@ -372,6 +376,46 @@ func (ss *session) handleLine(line string) {
 	case "CPK": // アプリごとの配置をスマホで変えた
 		if len(f) >= 2 {
 			ss.handleCPK(f[1])
+		}
+
+	case "FS": // スマホ → PC のファイル: 始め
+		if len(f) >= 3 {
+			ss.fileStart(f[1], f[2])
+		}
+
+	case "FD": // ファイルの中身
+		if len(f) >= 3 {
+			ss.fileData(f[1], f[2])
+		}
+
+	case "FE": // ファイルの終わり
+		if len(f) >= 2 {
+			ss.fileEnd(f[1])
+		}
+
+	case "FX": // ファイルを送るのをやめた
+		if len(f) >= 2 {
+			ss.fileAbort(f[1])
+			ss.fileAck(f[1], b64s("スマホで取り消されました"))
+		}
+
+	case "FK": // PC → スマホ のファイルを受け取った
+		if len(f) >= 3 {
+			ss.fileAck(f[1], f[2])
+		}
+
+	case "BG": // アプリを閉じている間 (PING の間隔が長くなる)
+		if len(f) >= 2 {
+			ss.xmu.Lock()
+			ss.bg = f[1] == "1"
+			ss.xmu.Unlock()
+		}
+
+	case "CLA": // クリップボードを自動で共有する
+		if len(f) >= 2 {
+			ss.xmu.Lock()
+			ss.clipAuto = f[1] == "1"
+			ss.xmu.Unlock()
 		}
 
 	case "RA": // 全部離す (アプリがバックグラウンドへ)

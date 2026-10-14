@@ -157,6 +157,10 @@ class ShortcutPanel(private val act: Activity) {
         section(root, "PC")
         root.addView(smallBtn("📊 PCの状態を見る") { StatusPanel(act).show() },
             LinearLayout.LayoutParams(-1, act.dpi(46)).apply { bottomMargin = act.dpi(6) })
+        root.addView(smallBtn("📎 ファイルをPCへ送る") {
+            dialog.dismiss()
+            act.startActivity(android.content.Intent(act, SendFileActivity::class.java))
+        }, LinearLayout.LayoutParams(-1, act.dpi(46)).apply { bottomMargin = act.dpi(6) })
         val p1 = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
         p1.addView(smallBtn("🔒 ロック") { power("LOCK", null) }, weightLp())
         p1.addView(smallBtn("画面オフ") { power("MONOFF", null) }, weightLp())

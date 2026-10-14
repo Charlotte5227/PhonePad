@@ -183,6 +183,22 @@ object Prefs {
         get() = synced("padPresets", "{}")
         set(v) = ConfigSync.write("padPresets", v)
 
+    // ---- PC から受け取る ----
+    /** アプリを閉じても PC とつないでおく (お知らせ・ファイル・スマホを探すを受け取る) */
+    var keepAlive: Boolean
+        get() = b("keepAlive", false)
+        set(v) = sp.edit().putBoolean("keepAlive", v).apply()
+
+    /** クリップボードを PC と自動で共有する */
+    var clipAuto: Boolean
+        get() = b("clipAuto", false)
+        set(v) = sp.edit().putBoolean("clipAuto", v).apply()
+
+    /** お知らせの許可を一度たずねた */
+    var notifAsked: Boolean
+        get() = b("notifAsked", false)
+        set(v) = sp.edit().putBoolean("notifAsked", v).apply()
+
     // ---- 共通 ----
     var vibrate: Boolean
         get() = b("vibrate", true)

@@ -45,6 +45,10 @@ type config struct {
 	HideOverlay bool `json:"hideOverlay,omitempty"`
 	// 通知領域で動いていることを一度お知らせした
 	TrayTipShown bool `json:"trayTipShown,omitempty"`
+	// スマホから受け取ったファイルの置き場所 ("" = ダウンロード\PhonePad)
+	RecvDir string `json:"recvDir,omitempty"`
+	// ダウンロードが終わったらスマホに知らせる
+	NotifyDownloads bool `json:"notifyDownloads,omitempty"`
 }
 
 type server struct {
@@ -59,12 +63,18 @@ type server struct {
 	fails    map[string][]time.Time
 	hist     *history
 	sync     *syncStore
+	timers   timerList
+	clip     clipState
 }
 
 // --background: Windows起動時の自動起動用。ウィンドウもブラウザも開かずに動く
 var background bool
 
 func main() {
+	// PhonePad.exe --notify "文" など: 起動中の PhonePad に頼んで終わる
+	if runCLI(os.Args[1:]) {
+		return
+	}
 	afterUpdate := false
 	console := false
 	for _, a := range os.Args[1:] {
@@ -131,6 +141,7 @@ func main() {
 	initGamepadSystem()
 	startGUI(s)
 	go s.watchForeground()
+	go s.watchDownloads()
 
 	fmt.Printf(" PC名      : %s\n", s.pcName)
 	fmt.Printf(" 接続コード: %s\n", s.code())
@@ -498,6 +509,7 @@ func (s *server) statusMux() *http.ServeMux {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	s.syncAPI(mux)
+	s.actionsAPI(mux)
 	return mux
 }
 

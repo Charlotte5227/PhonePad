@@ -1109,6 +1109,160 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && PcSound.ctx && PcSound.on) { PcSound.ctx.resume(); PcSound.next = 0; }
 });
 
+// ---------------------------------------------------------------- PCから届くもの
+// ページ・ファイルは画面の上に出す (押すと開く・保存する)
+const Banner = {
+  url: "",
+  show(title, body, go, href, download) {
+    $("bannerT").textContent = title;
+    $("bannerB").textContent = body;
+    const a = $("bannerGo");
+    a.textContent = go;
+    a.href = href;
+    if (download) a.setAttribute("download", download); else a.removeAttribute("download");
+    if (this.url && this.url !== href) { try { URL.revokeObjectURL(this.url); } catch (e) {} }
+    this.url = href.startsWith("blob:") ? href : "";
+    $("banner").hidden = false;
+    if (navigator.vibrate) navigator.vibrate(60);
+  },
+  hide() { $("banner").hidden = true; },
+};
+$("bannerClose").onclick = () => Banner.hide();
+$("bannerGo").addEventListener("click", () => {
+  const h = $("bannerGo").href;
+  setTimeout(() => { if ($("bannerGo").href === h) Banner.hide(); }, 300);
+});
+Link.on("NT ", (b) => {
+  let o; try { o = JSON.parse(unb64(b)); } catch (e) { return; }
+  toast((o.title ? o.title + "：" : "") + (o.text || ""));
+  if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+});
+Link.on("OU ", (b) => {
+  const u = unb64(b);
+  if (!/^https?:\/\//i.test(u)) return;
+  Banner.show("PCから届いたページ", u, "開く", u);
+});
+
+// スマホを鳴らす (このページを開いている間だけ)
+const Ring = {
+  ctx: null, timer: 0, stopAt: 0,
+  start() {
+    $("ring").hidden = false;
+    this.stopAt = Date.now() + 60000;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = this.ctx || (PcSound.ctx) || new AC();
+      this.ctx.resume();
+    } catch (e) {}
+    clearInterval(this.timer);
+    const beep = () => {
+      if (Date.now() > this.stopAt) { this.stop(); return; }
+      if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.frequency.value = i % 2 ? 1320 : 990;
+        g.gain.setValueAtTime(0.0001, t + i * 0.22);
+        g.gain.exponentialRampToValueAtTime(0.6, t + i * 0.22 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.22 + 0.2);
+        o.connect(g); g.connect(this.ctx.destination);
+        o.start(t + i * 0.22); o.stop(t + i * 0.22 + 0.21);
+      }
+    };
+    beep();
+    this.timer = setInterval(beep, 1000);
+  },
+  stop() {
+    clearInterval(this.timer);
+    $("ring").hidden = true;
+    if (navigator.vibrate) navigator.vibrate(0);
+  },
+};
+$("ringStop").onclick = () => Ring.stop();
+Link.on("RING ", (b) => { if (b.trim() === "1") Ring.start(); else Ring.stop(); });
+
+// ---- ファイル ----
+function bytesToB64(u8) {
+  let bin = "";
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64ToBytes(s) {
+  const bin = atob(s);
+  const b = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+  return b;
+}
+// PC → このページ (届いたら「保存」を出す)
+const Incoming = {};
+const MAX_IN = 300 * 1024 * 1024;
+Link.on("FS ", (rest) => {
+  const [id, meta] = rest.split(" ");
+  let m; try { m = JSON.parse(unb64(meta)); } catch (e) { return; }
+  if (m.s > MAX_IN) { Link.send("FK " + id + " " + b64("ブラウザ版で受け取れるのは300MBまでです")); return; }
+  Incoming[id] = { name: m.n || "file", size: m.s || 0, parts: [], got: 0 };
+  toast("PCからファイルを受け取っています: " + (m.n || ""));
+});
+Link.on("FD ", (rest) => {
+  const [id, data] = rest.split(" ");
+  const f = Incoming[id];
+  if (!f) return;
+  const b = b64ToBytes(data);
+  f.parts.push(b);
+  f.got += b.length;
+  if (f.got > MAX_IN) { delete Incoming[id]; Link.send("FK " + id + " " + b64("大きすぎます")); }
+});
+Link.on("FE ", (rest) => {
+  const id = rest.trim();
+  const f = Incoming[id];
+  if (!f) return;
+  delete Incoming[id];
+  const url = URL.createObjectURL(new Blob(f.parts));
+  Link.send("FK " + id + " ok");
+  Banner.show("PCからファイルが届きました", f.name, "保存", url, f.name);
+});
+Link.on("FX ", (rest) => { delete Incoming[rest.trim()]; });
+
+// このページ → PC
+const Outgoing = {};
+Link.on("FK ", (rest) => {
+  const [id, res] = rest.trim().split(" ");
+  const o = Outgoing[id];
+  if (!o) return;
+  delete Outgoing[id];
+  o(res === "ok" ? null : unb64(res || ""));
+});
+async function sendFileToPC(file, onProg) {
+  const id = "w" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+  const done = new Promise((res) => { Outgoing[id] = res; });
+  Link.send("FS " + id + " " + b64(JSON.stringify({ n: file.name, s: file.size })));
+  const CH = 32 * 1024;
+  for (let off = 0; off < file.size; off += CH) {
+    if (!Link.ready) { delete Outgoing[id]; return "切断されました"; }
+    // 送りきれていない分がたまったら待つ (マウスなどの操作が遅れないように)
+    while (Link.main && Link.main.ws.bufferedAmount > 256 * 1024) await new Promise((r) => setTimeout(r, 30));
+    const buf = new Uint8Array(await file.slice(off, off + CH).arrayBuffer());
+    Link.send("FD " + id + " " + bytesToB64(buf));
+    onProg(Math.min(1, (off + CH) / file.size));
+  }
+  Link.send("FE " + id);
+  return done;
+}
+$("sendFileBtn").onclick = () => $("sendFileIn").click();
+$("sendFileIn").onchange = async () => {
+  const files = [...$("sendFileIn").files];
+  $("sendFileIn").value = "";
+  if (!files.length) return;
+  if (!Link.ready) { toast("PCとつながっていません"); return; }
+  let ok = 0;
+  for (const f of files) {
+    const err = await sendFileToPC(f, (p) => { $("sendProg").textContent = "送っています: " + f.name + "（" + Math.round(p * 100) + "%）"; });
+    if (err) { toast("送れませんでした: " + err); } else ok++;
+  }
+  $("sendProg").textContent = ok + " 個のファイルをPCへ送りました（PCの「ダウンロード」の中の「PhonePad」フォルダ）";
+};
+
 // ヘルプ
 const openHelp = () => { $("helpSheet").hidden = false; };
 $("helpBtn2").onclick = openHelp;

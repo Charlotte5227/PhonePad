@@ -184,6 +184,20 @@
   .appchip .x { border: 0; padding: 0 6px; background: none; color: var(--sub); }
   .prof select { margin-top: 8px; }
   @media (max-width: 980px) { .scwrap, .padwrap { grid-template-columns: 1fr; } }
+
+  /* スマホに送る */
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 26px; text-align: center; color: var(--sub); }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+  .fileRow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .fileRow .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fileRow progress { width: 140px; accent-color: var(--accent); }
+  .fileRow .fs { width: 11em; font-size: 13px; color: var(--sub); }
+  .fileRow .fs.ok { color: var(--ok); } .fileRow .fs.warn { color: var(--warn); }
+  .inrow { display: flex; gap: 8px; align-items: center; }
+  .inrow input { flex: 1; }
+  textarea.nt { width: 100%; min-height: 64px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; resize: vertical; }
+  .msg { color: var(--ok); font-size: 13px; }
+  code { font: 13px Consolas, ui-monospace, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
 </style>
 </head>
 <body>
@@ -192,6 +206,7 @@
   <div class="state" id="state">接続を待っています</div>
   <a href="#connect" data-p="connect">📱 つなぐ</a>
   <a href="#history" data-p="history">🕘 接続中・履歴 <span class="n" id="navCount" hidden>0</span></a>
+  <a href="#send" data-p="send">📤 スマホに送る</a>
   <a href="#phones" data-p="phones">📲 スマホの設定</a>
   <a href="#profiles" data-p="profiles">🎮 アプリごとの配置</a>
   <a href="#backup" data-p="backup">💾 バックアップ</a>
@@ -286,10 +301,56 @@
         <button data-f="conn">接続・切断</button>
         <button data-f="reject">拒否した接続</button>
         <button data-f="power">電源操作</button>
+        <button data-f="file">ファイル</button>
       </div>
       <table class="hist"><tbody id="hist"></tbody></table>
       <p class="empty" id="histEmpty" hidden>まだ記録はありません。</p>
       <p class="note">最新の300件まで残ります。この記録はこのPCの中だけに保存されます。</p>
+    </section>
+  </div>
+
+  <!-- ======== スマホに送る ======== -->
+  <div class="page" id="p-send" hidden>
+    <h1>スマホに送る</h1>
+    <p class="lead">つながっているスマホに、ファイル・ページ・お知らせを送ったり、スマホを鳴らして探したりできます。</p>
+    <section class="card">
+      <h2>送り先</h2>
+      <div class="chips" id="sendTo"></div>
+      <p class="note" id="sendNone">いまつながっているスマホはありません。Android アプリの設定で「アプリを閉じてもPCとつないでおく」をオンにすると、アプリを閉じている間も受け取れます（ブラウザ版はページを開いている間だけ）。</p>
+    </section>
+    <section class="card">
+      <h2>ファイル</h2>
+      <div class="drop" id="drop">ここにファイルをドラッグ＆ドロップ　または　<button id="pickFile">ファイルを選ぶ</button><input type="file" id="fileIn" multiple hidden></div>
+      <div id="fileList" style="margin-top:8px"></div>
+      <p class="note">Android アプリは、スマホの「ダウンロード」の中の「PhonePad」フォルダに保存します。ブラウザ版は、受け取ると画面に「保存」が出ます。</p>
+    </section>
+    <section class="card">
+      <h2>スマホで開く</h2>
+      <div class="inrow"><input type="text" id="openUrl" placeholder="https://… （PCで見ているページのアドレスを貼り付け）"><button class="primary" id="openGo">スマホで開く</button></div>
+      <p class="note"><span class="msg" id="openMsg"></span>　アプリを開いていないときは、スマホに出るお知らせを押すと開きます。</p>
+    </section>
+    <section class="card">
+      <h2>お知らせ</h2>
+      <input type="text" id="ntTitle" placeholder="題名（なくてもよい）">
+      <textarea class="nt" id="ntText" placeholder="お知らせの文（例: 洗濯が終わる時間です）" style="margin-top:8px"></textarea>
+      <div class="actions">
+        <select id="ntDelay"><option value="0">今すぐ</option><option value="1">1分後</option><option value="5">5分後</option><option value="10">10分後</option><option value="15">15分後</option><option value="30">30分後</option><option value="60">1時間後</option><option value="120">2時間後</option></select>
+        <button class="primary" id="ntGo">送る</button><span class="msg" id="ntMsg"></span>
+      </div>
+      <div id="timerList" style="margin-top:8px"></div>
+      <label class="check" style="margin-top:14px"><input type="checkbox" id="notifyDl"><span>PCのダウンロードが終わったら、スマホに知らせる<br><small>ダウンロードフォルダに新しいファイルができあがると、つながっているスマホに知らせます。</small></span></label>
+      <p class="note">時間をおいたお知らせは、PhonePad を終了すると消えます。バッチファイルなどから <code>PhonePad.exe --notify "終わりました"</code> と実行しても送れます（<code>--open-on-phone URL</code>、<code>--send-to-phone ファイル</code>、<code>--ring-phone</code> も使えます）。</p>
+    </section>
+    <section class="card">
+      <h2>スマホを探す</h2>
+      <div class="actions" style="margin-top:0"><button class="primary" id="ringOn">鳴らす</button><button id="ringOff">止める</button><span class="msg" id="ringMsg"></span></div>
+      <p class="note">Android アプリは、マナーモードでもアラームの音量で1分間鳴ります。スマホの画面に出る「止める」でも止まります。タスクバー右下のアイコンを右クリック →「スマホを鳴らす」でも鳴らせます。</p>
+    </section>
+    <section class="card">
+      <h2>スマホから受け取ったファイル</h2>
+      <p class="note" style="margin-top:0">保存先: <span id="recvDir">-</span></p>
+      <div class="actions"><button id="openRecv">フォルダを開く</button></div>
+      <p class="note">スマホでは、Android アプリの ★ →「ファイルをPCへ送る」か、写真などの「共有」→「PhonePad」で送れます（ブラウザ版は その他 →「ファイルをPCへ送る」）。</p>
     </section>
   </div>
 
@@ -383,13 +444,14 @@
 <script src="qrcode.js"></script>
 <script src="editors.js"></script>
 <script src="manage.js"></script>
+<script src="send.js"></script>
 <script>
   "use strict";
   let lastQR = "", lastSite = null, lastDevs = "", lastWeb = null, lastHist = "", histFilter = "";
   const $ = (id) => document.getElementById(id);
 
   // ---- ページの切り替え ----
-  const PAGES = ["connect", "history", "phones", "profiles", "backup", "settings"];
+  const PAGES = ["connect", "history", "send", "phones", "profiles", "backup", "settings"];
   let curPage = "";
   function showPage() {
     const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "connect";
@@ -405,6 +467,7 @@
     if (p === "phones") Manage.showPhones();
     if (p === "profiles") Manage.showProfiles();
     if (p === "backup") Manage.showBackup();
+    if (p === "send") Send.show();
   }
   window.addEventListener("hashchange", showPage);
 
@@ -437,6 +500,7 @@
       $("pcName").textContent = s.pcName;
       $("ips").textContent = s.ips.join(", ") + "（ポート " + s.port + "）";
       const list = s.deviceList || [];
+      Send.setDevices(list);
       if (renderDevices(list) && !$("p-phones").hidden && !Manage.dirty) Manage.showPhones();
       const n = list.length;
       $("devSummary").textContent = n === 0 ? "なし" : list.map((d) => d.name).join("、");
@@ -514,9 +578,10 @@
   const KIND = {
     connect: ["接続", "ok"], disconnect: ["切断", ""], reject: ["拒否", "warn"],
     power: ["電源操作", ""], kick: ["PCから切断", ""], newcode: ["接続コードを変更", ""],
+    file: ["ファイルを受け取った", ""], sendfile: ["ファイルを送った", ""],
   };
   const POWER = { LOCK: "ロック", MONOFF: "画面を消す", SLEEP: "スリープ", RESTART: "再起動", SHUTDOWN: "シャットダウン" };
-  const FILTER = { conn: ["connect", "disconnect", "kick"], reject: ["reject"], power: ["power"] };
+  const FILTER = { conn: ["connect", "disconnect", "kick"], reject: ["reject"], power: ["power"], file: ["file", "sendfile"] };
   const pad2 = (n) => String(n).padStart(2, "0");
 
   async function loadHistory() {
@@ -562,6 +627,7 @@
       if (e.k === "power") text += "：" + (POWER[e.x] || e.x);
       if (e.k === "reject") text = (e.d ? e.d + "：" : "") + "接続コードが違うため拒否しました";
       if (e.k === "newcode") text = "接続中のスマホはすべて切断されました";
+      if ((e.k === "file" || e.k === "sendfile") && e.x) text += "：" + e.x;
       td.textContent = text;
       if (e.ip) { const ip = document.createElement("span"); ip.className = "ip"; ip.textContent = "　" + e.ip; td.appendChild(ip); }
       tr.append(tt, tk, td);
@@ -629,6 +695,7 @@
   };
 
   Manage.init();
+  Send.init();
   showPage();
   refresh();
   setInterval(refresh, 2000);

@@ -175,6 +175,22 @@
   .toast { position: fixed; left: 50%; bottom: calc(var(--sb) + 80px); transform: translateX(-50%); background: var(--surface2);
     border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 14px; max-width: 90%; z-index: 20; }
 
+  /* PCから届いたもの (ページ・ファイル) */
+  .banner { position: fixed; left: calc(var(--sl) + 10px); right: calc(var(--sr) + 10px); top: calc(var(--st) + 10px); z-index: 25;
+    background: var(--surface2); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .ios .banner { top: max(calc(var(--st) + 10px), 34px); }
+  .banner .t { font-size: 13px; color: var(--sub); }
+  .banner .b { font-size: 15px; word-break: break-all; margin: 2px 0 8px; }
+  .banner .row a, .banner .row button { flex: 1; min-height: 40px; display: grid; place-items: center; text-decoration: none; border-radius: 10px; }
+  .banner .row a { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .ring { position: fixed; inset: 0; z-index: 40; background: #E0A35A; color: #2A1A08; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 24px; animation: ringbg 1s infinite alternate; }
+  .ring b { font-size: 26px; margin-bottom: 10px; }
+  .ring button { margin-top: 28px; min-height: 64px; min-width: 200px; font-size: 20px; background: #2A1A08; color: #F1EBE4; border: 0; }
+  @keyframes ringbg { to { background: #FF6B3D; } }
+  @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
+  #sendProg { font-size: 13px; color: var(--sub); }
+
   /* 接続していないとき */
   .gate { position: fixed; inset: 0; background: var(--bg); z-index: 30; display: flex; flex-direction: column; justify-content: center;
     padding: 24px calc(var(--sr) + 24px) 24px calc(var(--sl) + 24px); }
@@ -301,6 +317,11 @@
     <div class="row" style="margin-top:6px"><button id="clipSend">PCへ送る</button><button id="clipGet">PCから受け取る</button></div>
     <p class="note">受け取った文字は、上の欄を長押しして「コピー」してください（ブラウザ版では自動でコピーできません）。</p>
 
+    <h2>ファイル</h2>
+    <div class="row"><button id="sendFileBtn">ファイルをPCへ送る</button></div>
+    <input type="file" id="sendFileIn" multiple hidden>
+    <p class="note" id="sendProg">写真などを選ぶと、PCの「ダウンロード」の中の「PhonePad」フォルダに保存されます。PCから送られたファイルは、届くと画面の上に「保存」が出ます。</p>
+
     <h2>電源</h2>
     <div class="row">
       <button data-pw="LOCK">ロック</button><button data-pw="MONOFF">画面を消す</button><button data-pw="SLEEP">スリープ</button>
@@ -348,6 +369,13 @@
   </div>
 </div></div>
 
+<div class="banner" id="banner" hidden>
+  <div class="t" id="bannerT"></div>
+  <div class="b" id="bannerB"></div>
+  <div class="row"><a id="bannerGo" target="_blank" rel="noopener">開く</a><button id="bannerClose">閉じる</button></div>
+</div>
+<div class="ring" id="ring" hidden><b>PCから呼ばれています</b><div>スマホを探しているときの音です。</div><button id="ringStop">止める</button></div>
+
 <div class="sheet" id="fnSheet" hidden><div>
   <h3>ファンクションキーなど</h3>
   <div class="keys fn" id="fnSheetKeys"></div>
@@ -383,6 +411,7 @@
     <li>コントローラー（Xbox 360 コントローラーとして認識、連打、配置・大きさ・形の変更）</li>
     <li>PCの画面表示と操作（タップ=クリック、なぞる=スクロール、2本指=拡大）</li>
     <li>★ショートカット、音量・出力先、PCの音をスマホで聞く、クリップボード、電源操作、PCの状態</li>
+    <li>PCとのファイルのやりとり、PCからのお知らせ・ページの受け取り、PCからスマホを鳴らす（このページを開いている間）</li>
     <li>通信の暗号化（アプリ版と同じく、同じWi-Fiの他の人には中身が見えません）</li>
   </ul>
 
@@ -392,7 +421,8 @@
     <li>スマホからPCの電源を入れる（Wake on LAN）<div class="why">ブラウザからは、そのための特別な通信を送れません。</div></li>
     <li>同じWi-Fi内のPCを自動で探す<div class="why">PCのIPアドレスが変わると、このページは開けなくなります。そのときはPCの画面のQRコードを読み取り直してください。</div></li>
     <li>コントローラー配置のプリセット保存、PCのアプリ一覧からの登録<div class="why">ブラウザ版では省いています。配置の変更そのものはできます。</div></li>
-    <li>PCから受け取った文字を自動でコピー<div class="why">ブラウザの安全のための制限です。欄を長押ししてコピーしてください。</div></li>
+    <li>PCから受け取った文字を自動でコピー、クリップボードの自動共有<div class="why">ブラウザの安全のための制限です。欄を長押ししてコピーしてください。</div></li>
+    <li>ページを閉じている間の受け取り（お知らせ・ファイル・スマホを探す）<div class="why">ブラウザ版はページを開いている間だけPCとつながります。Android アプリなら、アプリを閉じていても受け取れます。</div></li>
   </ul>
 
   <h4>アプリ版より操作性が落ちるところ</h4>

@@ -118,6 +118,21 @@ class SettingsActivity : Activity() {
         }
         toggle("文字を入力するとき、最後にタップした場所を拡大する", Prefs.screenAutoZoom) { Prefs.screenAutoZoom = it }
 
+        section("PCから受け取る")
+        toggle("アプリを閉じてもPCとつないでおく（PCからのお知らせ・ファイル・ページ、スマホを探す を受け取る）", Prefs.keepAlive) {
+            Prefs.keepAlive = it
+            if (it) askBackgroundPermissions()
+            LinkService.update(this)
+        }
+        toggle("クリップボードを自動で共有する（PCでコピーした文字がスマホに入り、スマホでコピーした文字がPCに入ります）", Prefs.clipAuto) {
+            Prefs.clipAuto = it
+            Link.send("CLA ${if (it) 1 else 0}")
+        }
+        box.addView(label(this, "つないでおくと、お知らせ欄に「PCとつながっています」と出ます。電池の減りが少し早くなります。" +
+            "スマホのクリップボードは、PhonePad を開いている間にコピーした文字だけPCへ送られます（Android の決まりのため）。", 12f, C.SUB).apply {
+            setPadding(0, dpi(6), 0, 0)
+        })
+
         section("PC")
         val auto = toggle("PCの起動時に PhonePad を自動で起動する（PCとつながっているときに変更できます）", false) {
             Link.send("AS ${if (it) 1 else 0}")
@@ -185,6 +200,23 @@ class SettingsActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, -2))
 
         setContentView(scroll)
+    }
+
+    /** お知らせの許可と、電池の最適化から外す許可をたずねる (アプリを閉じても受け取れるように) */
+    private fun askBackgroundPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !Notifier.allowed(this)) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 5)
+        }
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
+            try {
+                @android.annotation.SuppressLint("BatteryLife")
+                val i = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(android.net.Uri.parse("package:$packageName"))
+                startActivity(i)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun section(title: String) {

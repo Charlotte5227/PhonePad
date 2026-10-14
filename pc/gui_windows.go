@@ -11,6 +11,8 @@ import (
 	"image"
 	"image/png"
 	"log"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
@@ -50,6 +52,8 @@ var (
 	procLoadCursorW             = user32.NewProc("LoadCursorW")
 	procLoadIconW               = user32.NewProc("LoadIconW")
 	procShellNotifyIconW        = shell32.NewProc("Shell_NotifyIconW")
+	procSHGetKnownFolderPath    = shell32.NewProc("SHGetKnownFolderPath")
+	procAddClipboardListener    = user32.NewProc("AddClipboardFormatListener")
 	procGetModuleHandleW        = kernel32.NewProc("GetModuleHandleW")
 	procCreateSolidBrush        = gdi32.NewProc("CreateSolidBrush")
 	procCreatePen               = gdi32.NewProc("CreatePen")
@@ -91,6 +95,10 @@ const (
 	menuOverlay = 3
 	menuQuit    = 4
 	menuInfo    = 5
+	menuRing    = 6
+
+	wmClipboardUpdate   = 0x031D
+	ninBalloonUserClick = 0x0405 // お知らせが押された
 )
 
 type wndClassEx struct {
@@ -170,6 +178,7 @@ type guiState struct {
 	mu           sync.Mutex
 	balloonTitle string
 	balloonText  string
+	balloonPath  string // お知らせを押したときに開くファイル
 }
 
 var (
@@ -217,13 +226,15 @@ func guiRefresh() {
 	}
 }
 
-func guiBalloon(title, text string) {
+func guiBalloon(title, text string) { guiBalloonPath(title, text, "") }
+
+func guiBalloonPath(title, text, path string) {
 	g := currentGUI()
 	if g == nil {
 		return
 	}
 	g.mu.Lock()
-	g.balloonTitle, g.balloonText = title, text
+	g.balloonTitle, g.balloonText, g.balloonPath = title, text, path
 	g.mu.Unlock()
 	procPostMessageW.Call(g.tray, wmBalloon, 0, 0)
 }
@@ -324,6 +335,8 @@ func (g *guiState) init() error {
 		g.icon, _, _ = procLoadIconW.Call(0, 32512) // IDI_APPLICATION
 	}
 	g.addTray()
+	// PCのクリップボードが変わったら知らせてもらう (スマホとの自動共有)
+	procAddClipboardListener.Call(g.tray)
 	return nil
 }
 
@@ -405,7 +418,18 @@ func (g *guiState) handle(hwnd uintptr, msg uint32, wp, lp uintptr) (uintptr, bo
 				go openManager()
 			case wmRButtonUp, wmContextMenu:
 				g.menu()
+			case ninBalloonUserClick:
+				g.mu.Lock()
+				p := g.balloonPath
+				g.mu.Unlock()
+				if p != "" {
+					// 受け取ったファイルを選んだ状態でフォルダを開く
+					go func() { _ = shellExec("explorer.exe", `/select,"`+p+`"`) }()
+				}
 			}
+			return 0, true
+		case wmClipboardUpdate:
+			go g.srv.clipboardChanged()
 			return 0, true
 		case wmRefresh:
 			g.refresh()
@@ -462,6 +486,7 @@ func (g *guiState) menu() {
 	if len(g.names) == 0 {
 		kf = grayed
 	}
+	add(kf, menuRing, "スマホを鳴らす（探す）")
 	add(kf, menuKickAll, "すべてのスマホを切断")
 	add(sep, 0, "")
 	of := uint32(0)
@@ -482,6 +507,8 @@ func (g *guiState) menu() {
 		go openManager()
 	case menuKickAll:
 		go g.srv.kickAll()
+	case menuRing:
+		go g.srv.ringPhones(nil, true)
 	case menuOverlay:
 		g.srv.setOverlay(!g.srv.overlayOn())
 	case menuQuit:
@@ -692,4 +719,33 @@ func shrink(src image.Image, size int) []byte {
 		}
 	}
 	return out
+}
+
+// スマホからファイルを受け取ったことを知らせる (押すとフォルダが開く)
+func guiFileReceived(path, from string) {
+	guiBalloonPath("ファイルを受け取りました", filepath.Base(path)+"（"+from+" から）\n押すとフォルダを開きます", path)
+}
+
+// ダウンロードフォルダ (場所を変えていればそちら)
+func downloadsDir() string {
+	// FOLDERID_Downloads {374DE290-123F-4565-9164-39C4925E467B}
+	id := [16]byte{0x90, 0xE2, 0x4D, 0x37, 0x3F, 0x12, 0x65, 0x45, 0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B}
+	var p *uint16
+	if r, _, _ := procSHGetKnownFolderPath.Call(uintptr(unsafe.Pointer(&id[0])), 0, 0, uintptr(unsafe.Pointer(&p))); r == 0 && p != nil {
+		defer procCoTaskMemFree.Call(uintptr(unsafe.Pointer(p)))
+		return syscall.UTF16ToString(unsafe.Slice(p, 1024))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, "Downloads")
+	}
+	return ""
+}
+
+var procMessageBoxW = user32.NewProc("MessageBoxW")
+
+// コマンドから使ったときのエラー (黒いウィンドウが無いので、小さな窓で出す)
+func cliError(msg string) {
+	t, _ := syscall.UTF16PtrFromString("PhonePad")
+	m, _ := syscall.UTF16PtrFromString(msg)
+	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), 0x30 /* MB_ICONWARNING */)
 }

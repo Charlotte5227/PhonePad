@@ -8,6 +8,14 @@ import java.io.File
 
 class PhonePadApp : Application() {
     companion object {
+        lateinit var app: PhonePadApp
+            private set
+
+        /** いま前に出ている画面 (なければ null) */
+        @Volatile
+        var current: Activity? = null
+            private set
+
         /** 保存された強制終了の記録を取り出して消す */
         fun takeCrashLog(ctx: Context): String? {
             val f = File(ctx.filesDir, "crash.txt")
@@ -22,9 +30,15 @@ class PhonePadApp : Application() {
 
     private var started = 0
 
+    // スマホでコピーしたら PC へ (クリップボードの自動共有。アプリが前に出ている間だけ読める)
+    private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener { ClipSync.check() }
+    private val focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { has -> if (has) ClipSync.check() }
+
     override fun onCreate() {
         super.onCreate()
+        app = this
         Prefs.init(this)
+        Notifier.setup(this)
 
         // 強制終了したときは原因をファイルに残し、次回起動時に表示する
         val prev = Thread.getDefaultUncaughtExceptionHandler()
@@ -49,6 +63,11 @@ class PhonePadApp : Application() {
             override fun onActivityStarted(a: Activity) {
                 started++
                 Link.foreground = true
+                if (started == 1) {
+                    getSystemService(android.content.ClipboardManager::class.java)?.addPrimaryClipChangedListener(clipListener)
+                    // アプリを開いたら、閉じても PC とつないでおく準備をする (設定でオンのとき)
+                    LinkService.update(this@PhonePadApp)
+                }
                 if (started == 1 && Prefs.pcAudio) PcAudio.start()
             }
 
@@ -57,6 +76,7 @@ class PhonePadApp : Application() {
                 if (started <= 0) {
                     started = 0
                     Link.foreground = false
+                    getSystemService(android.content.ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipListener)
                     Link.send("RA")
                     PcAudio.stop()
                     Updater.onAppBackground()
@@ -65,8 +85,17 @@ class PhonePadApp : Application() {
 
             override fun onActivityCreated(a: Activity, b: Bundle?) {}
             // 開いたときに新しいバージョンがあれば知らせる
-            override fun onActivityResumed(a: Activity) = Updater.onResumed(a)
-            override fun onActivityPaused(a: Activity) = Updater.onPaused(a)
+            override fun onActivityResumed(a: Activity) {
+                current = a
+                a.window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener(focusListener)
+                Updater.onResumed(a)
+            }
+
+            override fun onActivityPaused(a: Activity) {
+                if (current === a) current = null
+                a.window?.decorView?.viewTreeObserver?.removeOnWindowFocusChangeListener(focusListener)
+                Updater.onPaused(a)
+            }
             override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
             override fun onActivityDestroyed(a: Activity) {}
         })

@@ -765,6 +765,11 @@ class RemoteActivity : Activity() {
             pcField2.update(it)
         }
         ConfigSync.listeners.add(syncListener)
+        // PC からのお知らせ・ファイルを出せるように、一度だけ許可をたずねる (Android 13 以降)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !Prefs.notifAsked && !Notifier.allowed(this)) {
+            Prefs.notifAsked = true
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 5)
+        }
         ConfigSync.onNotice = { toast(it) }
         // 設定画面などで配置や操作の種類が変わっていることがあるので、作り直す
         if (!stage.editing && !typingNow()) {

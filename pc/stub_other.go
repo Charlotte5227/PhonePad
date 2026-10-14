@@ -41,14 +41,19 @@ func (l *logInput) keyTap(n string, m int) error { l.rec(fmt.Sprintf("key %s %d"
 func setupConsole(bool) bool { return true }
 
 // 通知領域のアイコン・画面の隅の表示は Windows だけ
-func startGUI(*server)              {}
-func guiRefresh()                   {}
-func guiBalloon(title, text string) {}
-func guiShutdown()                  {}
-func guiAvailable() bool            { return false }
-func openManager()                  {}
-func openURL(string)                {}
-func shellOpen(string) error        { return nil }
+func startGUI(*server)                  {}
+func guiRefresh()                       {}
+func guiBalloon(title, text string)     {}
+func guiShutdown()                      {}
+func guiAvailable() bool                { return false }
+func openManager()                      {}
+func guiFileReceived(path, from string) {}
+func cliError(msg string)               { fmt.Fprintln(os.Stderr, msg) }
+
+// ダウンロードフォルダ (試験用に PHONEPAD_DOWNLOADS で決める)
+func downloadsDir() string   { return os.Getenv("PHONEPAD_DOWNLOADS") }
+func openURL(string)         {}
+func shellOpen(string) error { return nil }
 
 type logPad struct{}
 
